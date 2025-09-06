@@ -11,30 +11,42 @@ const UpdateTransactionSchema = z.object({
   status: z.enum(['SUCCESSFUL', 'FAILED']),
 });
 
-const AddMoneySchema = z.object({
-  userId: z.string(),
+// Schema for the editable form
+const ManualApiRequestSchema = z.object({
+  userId: z.string(), // Needed for DB updates
+  apiUrl: z.string().url(),
+  operatorcode: z.string(),
+  providercode: z.string(),
   username: z.string(),
-  amount: z.coerce.number().positive({ message: 'Amount must be positive.' }),
+  password: z.string(),
   referenceid: z.string(),
+  type: z.string(),
+  amount: z.coerce.number(),
+  signature: z.string().optional(),
 });
 
 
 const API_CONFIG = {
-  providercode: 'JE',
-  operatorcode: 'i4bi',
+  // secret_key is still needed for server-side signature generation
   secret_key: process.env.API_SECRET_KEY || '904c3acfdc028f495ccc5b60d01dcc49',
 };
 
-const API_URL = 'http://gsmd.336699bet.com/makeTransfer.aspx';
-
 const makeTransferApiCall = async (
+  apiUrl: string,
   payload: Record<string, string | number>
 ) => {
   const params = new URLSearchParams();
   for (const key in payload) {
-    params.append(key, String(payload[key]));
+    // Do not add signature to params yet, it's part of the final URL
+    if (key !== 'signature') {
+      params.append(key, String(payload[key]));
+    }
   }
-  const requestUrl = `${API_URL}?${params.toString()}`;
+
+  // Signature must be the last parameter
+  params.append('signature', String(payload.signature));
+  
+  const requestUrl = `${apiUrl}?${params.toString()}`;
   console.log(`[API_CALL] Requesting URL: ${requestUrl}`);
 
   try {
@@ -50,10 +62,12 @@ const makeTransferApiCall = async (
     console.log(`[API_CALL] Response Body: ${responseText}`);
 
     if (!response.ok) {
+        // Return the raw text as error message if response is not ok
         return { errCode: response.status.toString(), errMsg: responseText };
     }
 
     try {
+        // Attempt to parse JSON, if it fails, return raw text
         return JSON.parse(responseText);
     } catch (e) {
         return { errCode: '998', errMsg: `Invalid JSON response: ${responseText}` };
@@ -111,18 +125,19 @@ export async function updateTransactionStatus(
       amount: transaction.amount,
       signature,
     };
+    
+    const defaultApiUrl = 'http://gsmd.336699bet.com/makeTransfer.aspx';
+    const response = await makeTransferApiCall(defaultApiUrl, payload);
 
-    const response = await makeTransferApiCall(payload);
-
+    if (!response || !('errCode' in response)) {
+      return { error: 'API call failed: Invalid response from provider.' };
+    }
+    
     if (response.errCode === '0') {
       const { newBalance } = await updateTransactionInDb(transaction._id, 'SUCCESSFUL', transaction.referenceid);
       console.log(`SUCCESS: Transaction ${transaction.referenceid} approved. Amount ${transaction.amount} deposited to ${transaction.username}'s wallet.`);
       return { success: 'Transaction approved and funds deposited successfully!', newBalance };
-    } else if (['997', '999'].includes(response.errCode)) {
-      console.log(`UNKNOWN STATUS: Transaction ${transaction.referenceid} status unknown with code ${response.errCode}: ${response.errMsg}`);
-      return { error: `Transaction status is unknown. Please check with the provider or retry later. (Code: ${response.errCode})` };
-    }
-    else {
+    } else {
       await updateTransactionInDb(transaction._id, 'FAILED', null);
       console.log(`API ERROR: Transaction ${transaction.referenceid} failed with code ${response.errCode}: ${response.errMsg}`);
       return { error: `API Error: ${response.errMsg} (Code: ${response.errCode})` };
@@ -137,61 +152,46 @@ export async function updateTransactionStatus(
 }
 
 export async function addMoneyToWallet(prevState: any, formData: FormData) {
-  const validatedFields = AddMoneySchema.safeParse(Object.fromEntries(formData.entries()));
+  const validatedFields = ManualApiRequestSchema.safeParse(Object.fromEntries(formData.entries()));
 
   if (!validatedFields.success) {
-      const errorMessages = validatedFields.error.issues.map(issue => issue.message).join(', ');
+      const errorMessages = validatedFields.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
       return { error: `Invalid data provided: ${errorMessages}` };
   }
 
-  const { userId, username, amount, referenceid } = validatedFields.data;
+  const { userId, apiUrl, ...payload } = validatedFields.data;
 
   try {
-      const user = await getUser(username);
-      if (!user || !user.password) {
-          return { error: `User ${username} not found or has no password.` };
+      // If signature is not provided by the user, generate it on the server
+      if (!payload.signature) {
+          const { amount, operatorcode, password, providercode, referenceid, type, username } = payload;
+          const signatureString = `${amount}${operatorcode}${password}${providercode}${referenceid}${type}${username}${API_CONFIG.secret_key}`;
+          payload.signature = createHash('md5').update(signatureString).digest('hex').toUpperCase();
+          console.log(`[SERVER_SIGN] Generated signature: ${payload.signature}`);
+      } else {
+          console.log(`[USER_SIGN] Using user-provided signature: ${payload.signature}`);
       }
-      const userPassword = user.password;
-      const type = '0'; // 0 for deposit
 
-      const signatureString = `${amount}${API_CONFIG.operatorcode}${userPassword}${API_CONFIG.providercode}${referenceid}${type}${username}${API_CONFIG.secret_key}`;
-      const serverSignature = createHash('md5').update(signatureString).digest('hex').toUpperCase();
+      const response = await makeTransferApiCall(apiUrl, payload);
 
-      const payload = {
-          operatorcode: API_CONFIG.operatorcode,
-          providercode: API_CONFIG.providercode,
-          username,
-          password: userPassword,
-          referenceid,
-          type,
-          amount,
-          signature: serverSignature,
-      };
-
-      const response = await makeTransferApiCall(payload);
-
-      if (!response || !('errCode' in response)) {
-        console.log(`API CALL FAILED: Invalid response from API for ${username}.`);
-        return { error: 'Failed to communicate with the API provider. The response was invalid.' };
+      if (!response || typeof response.errCode === 'undefined') {
+        return { error: 'API call failed: Received an invalid or empty response from the provider.' };
       }
       
       if (response.errCode === '0') {
           const newBalance = await addDepositToDb({
-              orderId: referenceid,
-              username,
-              amount: amount,
-              money: amount.toString(),
+              orderId: payload.referenceid,
+              username: payload.username,
+              amount: payload.amount,
+              money: payload.amount.toString(),
               status: 'SUCCESSFUL',
               createdAt: new Date(),
           });
-          console.log(`SUCCESS: Manual deposit of ${amount} for ${username} successful.`);
-          return { success: `Successfully deposited ₹${amount.toLocaleString()} to ${username}'s wallet.`, newBalance };
-      } else if (['997', '999'].includes(response.errCode)) {
-          console.log(`UNKNOWN STATUS: Manual deposit for ${username} status unknown with code ${response.errCode}: ${response.errMsg}`);
-          return { error: `Transaction status is unknown. Please check with the provider or retry later. (Code: ${response.errCode})` };
+          console.log(`SUCCESS: Manual deposit of ${payload.amount} for ${payload.username} successful.`);
+          return { success: `Successfully deposited ₹${payload.amount.toLocaleString()} to ${payload.username}'s wallet.`, newBalance };
       } else {
-          console.log(`API ERROR: Manual deposit for ${username} failed with code ${response.errCode}: ${response.errMsg}`);
-          return { error: `API Error: ${response.errMsg} (Code: ${response.errCode})` };
+          console.log(`API ERROR: Manual deposit for ${payload.username} failed with code ${response.errCode}: ${response.errMsg}`);
+          return { error: `API Error: ${response.errMsg || 'Unknown error.'} (Code: ${response.errCode})` };
       }
   } catch (error) {
       console.error('Add Money Server Action Error:', error);
