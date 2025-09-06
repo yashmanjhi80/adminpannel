@@ -6,7 +6,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { fetchDeposits, fetchPendingTransactions, fetchUsers } from '@/lib/data';
-import OverviewChart from '@/components/overview-chart';
+import DashboardChart from '@/components/dashboard-chart';
 
 export default async function DashboardPage() {
   const users = await fetchUsers();
@@ -80,7 +80,7 @@ export default async function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <OverviewChart />
+            <DashboardChart />
           </CardContent>
         </Card>
       </div>
