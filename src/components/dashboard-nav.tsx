@@ -34,7 +34,7 @@ export default function DashboardNav() {
     <>
       <SidebarHeader>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="shrink-0 md:hidden">
+          <Button variant="ghost" size="icon" className="shrink-0 md:hidden" asChild>
             <SidebarTrigger />
           </Button>
           <Landmark className="w-6 h-6 text-primary" />
