@@ -2,7 +2,6 @@ import clientPromise from './mongodb';
 import type { User, Deposit, PendingTransaction } from './definitions';
 import { ObjectId } from 'mongodb';
 
-
 const DB_NAME = process.env.DB_NAME || 'user';
 
 async function getDb() {
@@ -10,7 +9,6 @@ async function getDb() {
     return client.db(DB_NAME);
 }
 
-// In a real application, these functions would fetch data from your MongoDB database.
 export async function fetchUsers(): Promise<User[]> {
     const db = await getDb();
     const users = await db.collection('users').find({}).sort({ createdAt: -1 }).toArray();
@@ -44,7 +42,7 @@ export async function getUser(username: string): Promise<User | null> {
     return JSON.parse(JSON.stringify(user));
 }
 
-export async function updateTransactionInDb(id: string, newStatus: 'SUCCESSFUL' | 'FAILED') {
+export async function updateTransactionInDb(id: string, newStatus: 'SUCCESSFUL' | 'FAILED', referenceid: string | null) {
     const db = await getDb();
     const pendingCollection = db.collection('pendingTransactions');
     
@@ -68,14 +66,39 @@ export async function updateTransactionInDb(id: string, newStatus: 'SUCCESSFUL' 
         await pendingCollection.deleteOne({ _id: new ObjectId(id) });
 
         // Update user's wallet
-        await db.collection('users').updateOne(
+        const updateResult = await db.collection('users').findOneAndUpdate(
             { username: transaction.username },
-            { $inc: { walletBalance: transaction.amount } }
+            { $inc: { walletBalance: transaction.amount } },
+            { returnDocument: 'after' }
         );
+
+        return { ...deposit, _id: new ObjectId().toString(), newBalance: updateResult?.value?.walletBalance };
 
     } else { // FAILED
         // Move to a 'failedTransactions' collection or just delete from pending
         await pendingCollection.deleteOne({ _id: new ObjectId(id) });
         // Optionally, add to a failed collection for auditing
+        return null;
     }
+}
+
+
+export async function addDepositToDb(depositData: Omit<Deposit, '_id'>): Promise<number> {
+    const db = await getDb();
+    
+    // Insert the successful deposit record
+    await db.collection('deposits').insertOne(depositData);
+    
+    // Update the user's wallet balance
+    const result = await db.collection('users').findOneAndUpdate(
+        { username: depositData.username },
+        { $inc: { walletBalance: depositData.amount } },
+        { returnDocument: 'after', projection: { walletBalance: 1 } }
+    );
+
+    if (!result?.value) {
+        throw new Error('User not found or failed to update balance');
+    }
+
+    return result.value.walletBalance;
 }

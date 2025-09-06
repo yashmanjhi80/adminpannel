@@ -2,13 +2,20 @@
 
 import { z } from 'zod';
 import { createHash } from 'crypto';
-import type { PendingTransaction } from './definitions';
-import { getUser, updateTransactionInDb } from './data';
+import type { PendingTransaction, User } from './definitions';
+import { getUser, updateTransactionInDb, addDepositToDb } from './data';
 
-const FormSchema = z.object({
+const UpdateTransactionSchema = z.object({
   transactionId: z.string(),
   status: z.enum(['SUCCESSFUL', 'FAILED']),
 });
+
+const AddMoneySchema = z.object({
+  userId: z.string(),
+  username: z.string(),
+  amount: z.coerce.number().positive({ message: 'Amount must be positive.' }),
+});
+
 
 const API_CONFIG = {
   providercode: 'JE',
@@ -43,7 +50,7 @@ export async function updateTransactionStatus(
   transaction: PendingTransaction,
   newStatus: 'SUCCESSFUL' | 'FAILED'
 ) {
-  const validatedFields = FormSchema.safeParse({
+  const validatedFields = UpdateTransactionSchema.safeParse({
     transactionId: transaction._id,
     status: newStatus,
   });
@@ -53,7 +60,7 @@ export async function updateTransactionStatus(
   }
   
   if (newStatus === 'FAILED') {
-    await updateTransactionInDb(transaction._id, 'FAILED');
+    await updateTransactionInDb(transaction._id, 'FAILED', null);
     console.log(`Transaction ${transaction._id} marked as FAILED.`);
     return { success: 'Transaction marked as Failed.' };
   }
@@ -86,9 +93,9 @@ export async function updateTransactionStatus(
     const response = await makeTransferApiCall(payload);
 
     if (response.errCode === '0') {
-      await updateTransactionInDb(transaction._id, 'SUCCESSFUL');
+      const updatedTransaction = await updateTransactionInDb(transaction._id, 'SUCCESSFUL', transaction.referenceid);
       console.log(`SUCCESS: Transaction ${transaction.referenceid} approved. Amount ${transaction.amount} deposited to ${transaction.username}'s wallet.`);
-      return { success: 'Transaction approved and funds deposited successfully!' };
+      return { success: 'Transaction approved and funds deposited successfully!', transaction: updatedTransaction };
     } else if (['997', '999'].includes(response.errCode)) {
        // As per docs, for unknown status, we should withhold funds and check later.
        // For this admin panel, we will treat it as a temporary failure and ask admin to retry.
@@ -97,12 +104,73 @@ export async function updateTransactionStatus(
     }
     else {
       // Any other error code is a definitive failure
-      await updateTransactionInDb(transaction._id, 'FAILED');
+      await updateTransactionInDb(transaction._id, 'FAILED', null);
       console.log(`API ERROR: Transaction ${transaction.referenceid} failed with code ${response.errCode}: ${response.errMsg}`);
       return { error: `API Error: ${response.errMsg} (Code: ${response.errCode})` };
     }
   } catch (error) {
     console.error('Server Action Error:', error);
     return { error: 'An unexpected server error occurred.' };
+  }
+}
+
+export async function addMoneyToWallet(prevState: any, formData: FormData) {
+  const validatedFields = AddMoneySchema.safeParse(Object.fromEntries(formData.entries()));
+
+  if (!validatedFields.success) {
+      return { error: 'Invalid fields: ' + validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { userId, username, amount } = validatedFields.data;
+  
+  try {
+      const user = await getUser(username);
+      if (!user || !user.password) {
+          return { error: `User ${username} not found or has no password.` };
+      }
+      const userPassword = user.password;
+      const type = '0'; // 0 for deposit
+      const referenceid = `MANUAL_${Date.now()}`;
+
+      const signatureString = `${amount}${API_CONFIG.operatorcode}${userPassword}${API_CONFIG.providercode}${referenceid}${type}${username}${API_CONFIG.secret_key}`;
+      const signature = createHash('md5')
+          .update(signatureString)
+          .digest('hex')
+          .toUpperCase();
+
+      const payload = {
+          operatorcode: API_CONFIG.operatorcode,
+          providercode: API_CONFIG.providercode,
+          username,
+          password: userPassword,
+          referenceid,
+          type,
+          amount,
+          signature,
+      };
+
+      const response = await makeTransferApiCall(payload);
+
+      if (response.errCode === '0') {
+          const newBalance = await addDepositToDb({
+              orderId: referenceid,
+              username,
+              amount,
+              money: amount.toString(),
+              status: 'SUCCESSFUL',
+              createdAt: new Date(),
+          });
+          console.log(`SUCCESS: Manual deposit of ${amount} for ${username} successful.`);
+          return { success: `Successfully deposited ₹${amount.toLocaleString()} to ${username}'s wallet.`, newBalance };
+      } else if (['997', '999'].includes(response.errCode)) {
+          console.log(`UNKNOWN STATUS: Manual deposit for ${username} status unknown with code ${response.errCode}: ${response.errMsg}`);
+          return { error: `Transaction status is unknown. Please check with the provider or retry later. (Code: ${response.errCode})` };
+      } else {
+          console.log(`API ERROR: Manual deposit for ${username} failed with code ${response.errCode}: ${response.errMsg}`);
+          return { error: `API Error: ${response.errMsg} (Code: ${response.errCode})` };
+      }
+  } catch (error) {
+      console.error('Add Money Server Action Error:', error);
+      return { error: 'An unexpected server error occurred.' };
   }
 }
