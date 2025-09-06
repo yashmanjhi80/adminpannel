@@ -34,17 +34,34 @@ const makeTransferApiCall = async (
   for (const key in payload) {
     params.append(key, String(payload[key]));
   }
+  const requestUrl = `${API_URL}?${params.toString()}`;
+  console.log(`[API_CALL] Requesting URL: ${requestUrl}`);
 
   try {
-    const response = await fetch(`${API_URL}?${params.toString()}`);
+    const response = await fetch(requestUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    const responseText = await response.text();
+    console.log(`[API_CALL] Response Status: ${response.status}`);
+    console.log(`[API_CALL] Response Body: ${responseText}`);
+
     if (!response.ok) {
-      const errorBody = await response.text();
-      console.error(`API call failed with status: ${response.status}`, errorBody);
-      throw new Error(`API call failed with status: ${response.status}. Body: ${errorBody}`);
+        throw new Error(`API call failed with status ${response.status}: ${responseText}`);
     }
-    return await response.json();
+
+    // It's possible the API returns non-JSON on failure, so we parse carefully.
+    try {
+        return JSON.parse(responseText);
+    } catch (e) {
+        throw new Error(`Failed to parse API response as JSON: ${responseText}`);
+    }
+    
   } catch (error) {
-    console.error("API Call Error:", error);
+    console.error("[API_CALL_ERROR]", error);
     if (error instanceof Error) {
         return { errCode: '999', errMsg: `Network error: ${error.message}` };
     }
@@ -141,9 +158,8 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
       const userPassword = user.password;
       const type = '0'; // 0 for deposit
 
-      // Regenerate signature on server to ensure security
-      const serverSignatureString = `${amount}${API_CONFIG.operatorcode}${userPassword}${API_CONFIG.providercode}${referenceid}${type}${username}${API_CONFIG.secret_key}`;
-      const serverSignature = createHash('md5').update(serverSignatureString).digest('hex').toUpperCase();
+      const signatureString = `${amount}${API_CONFIG.operatorcode}${userPassword}${API_CONFIG.providercode}${referenceid}${type}${username}${API_CONFIG.secret_key}`;
+      const serverSignature = createHash('md5').update(signatureString).digest('hex').toUpperCase();
 
       const payload = {
           operatorcode: API_CONFIG.operatorcode,
