@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -118,10 +119,15 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
   const validatedFields = AddMoneySchema.safeParse(Object.fromEntries(formData.entries()));
 
   if (!validatedFields.success) {
-      return { error: 'Invalid fields: ' + validatedFields.error.flatten().fieldErrors };
+      return { error: 'Invalid data provided.' };
   }
 
   const { userId, username, amount } = validatedFields.data;
+  const parsedAmount = parseFloat(amount.toString());
+
+  if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    return { error: 'Invalid amount.' };
+  }
   
   try {
       const user = await getUser(username);
@@ -132,7 +138,7 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
       const type = '0'; // 0 for deposit
       const referenceid = `MANUAL_${Date.now()}`;
 
-      const signatureString = `${amount}${API_CONFIG.operatorcode}${userPassword}${API_CONFIG.providercode}${referenceid}${type}${username}${API_CONFIG.secret_key}`;
+      const signatureString = `${parsedAmount}${API_CONFIG.operatorcode}${userPassword}${API_CONFIG.providercode}${referenceid}${type}${username}${API_CONFIG.secret_key}`;
       const signature = createHash('md5')
           .update(signatureString)
           .digest('hex')
@@ -145,7 +151,7 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
           password: userPassword,
           referenceid,
           type,
-          amount,
+          amount: parsedAmount,
           signature,
       };
 
@@ -155,13 +161,13 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
           const newBalance = await addDepositToDb({
               orderId: referenceid,
               username,
-              amount,
-              money: amount.toString(),
+              amount: parsedAmount,
+              money: parsedAmount.toString(),
               status: 'SUCCESSFUL',
               createdAt: new Date(),
           });
-          console.log(`SUCCESS: Manual deposit of ${amount} for ${username} successful.`);
-          return { success: `Successfully deposited ₹${amount.toLocaleString()} to ${username}'s wallet.`, newBalance };
+          console.log(`SUCCESS: Manual deposit of ${parsedAmount} for ${username} successful.`);
+          return { success: `Successfully deposited ₹${parsedAmount.toLocaleString()} to ${username}'s wallet.`, newBalance };
       } else if (['997', '999'].includes(response.errCode)) {
           console.log(`UNKNOWN STATUS: Manual deposit for ${username} status unknown with code ${response.errCode}: ${response.errMsg}`);
           return { error: `Transaction status is unknown. Please check with the provider or retry later. (Code: ${response.errCode})` };
