@@ -13,19 +13,19 @@ async function getDb() {
 // In a real application, these functions would fetch data from your MongoDB database.
 export async function fetchUsers(): Promise<User[]> {
     const db = await getDb();
-    const users = await db.collection('users').find({}).toArray();
+    const users = await db.collection('users').find({}).sort({ createdAt: -1 }).toArray();
     return JSON.parse(JSON.stringify(users));
 }
 
 export async function fetchDeposits(): Promise<Deposit[]> {
     const db = await getDb();
-    const deposits = await db.collection('deposits').find({ status: 'SUCCESSFUL' }).toArray();
+    const deposits = await db.collection('deposits').find({ status: 'SUCCESSFUL' }).sort({ createdAt: -1 }).toArray();
     return JSON.parse(JSON.stringify(deposits));
 }
 
 export async function fetchPendingTransactions(): Promise<PendingTransaction[]> {
     const db = await getDb();
-    const pending = await db.collection('pendingTransactions').find({}).toArray();
+    const pending = await db.collection('pendingTransactions').find({}).sort({ createdAt: -1 }).toArray();
     return JSON.parse(JSON.stringify(pending));
 }
 

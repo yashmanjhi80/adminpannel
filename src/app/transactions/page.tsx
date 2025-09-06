@@ -5,7 +5,7 @@ export default async function TransactionsPage() {
   const transactions = await fetchAllTransactions();
   const serializableTransactions = transactions.map(tx => ({
     ...tx,
-    createdAt: tx.createdAt.toISOString(),
+    createdAt: new Date(tx.createdAt).toISOString(),
   }));
 
 
