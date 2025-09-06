@@ -73,7 +73,7 @@ export default function AddMoneyDialog({
   }, [isOpen, reset]);
   
   useEffect(() => {
-    if (!state) return;
+    if (!state || !isOpen) return;
 
     if (state.success) {
       toast({
@@ -92,7 +92,7 @@ export default function AddMoneyDialog({
         variant: 'destructive',
       });
     }
-  }, [state, toast, setIsOpen, onBalanceUpdate, user._id]);
+  }, [state, toast, setIsOpen, onBalanceUpdate, user._id, isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
