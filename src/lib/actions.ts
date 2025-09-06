@@ -50,16 +50,12 @@ const makeTransferApiCall = async (
     console.log(`[API_CALL] Response Body: ${responseText}`);
 
     if (!response.ok) {
-        // If status is not 2xx, treat the whole response as an error message.
         return { errCode: response.status.toString(), errMsg: responseText };
     }
 
     try {
-        // Attempt to parse as JSON. If it succeeds, return the parsed object.
         return JSON.parse(responseText);
     } catch (e) {
-        // If JSON parsing fails, it's an unexpected (but likely failed) response.
-        // Return a custom error with the raw text.
         return { errCode: '998', errMsg: `Invalid JSON response: ${responseText}` };
     }
     
@@ -123,13 +119,10 @@ export async function updateTransactionStatus(
       console.log(`SUCCESS: Transaction ${transaction.referenceid} approved. Amount ${transaction.amount} deposited to ${transaction.username}'s wallet.`);
       return { success: 'Transaction approved and funds deposited successfully!', newBalance };
     } else if (['997', '999'].includes(response.errCode)) {
-       // As per docs, for unknown status, we should withhold funds and check later.
-       // For this admin panel, we will treat it as a temporary failure and ask admin to retry.
       console.log(`UNKNOWN STATUS: Transaction ${transaction.referenceid} status unknown with code ${response.errCode}: ${response.errMsg}`);
       return { error: `Transaction status is unknown. Please check with the provider or retry later. (Code: ${response.errCode})` };
     }
     else {
-      // Any other error code is a definitive failure
       await updateTransactionInDb(transaction._id, 'FAILED', null);
       console.log(`API ERROR: Transaction ${transaction.referenceid} failed with code ${response.errCode}: ${response.errMsg}`);
       return { error: `API Error: ${response.errMsg} (Code: ${response.errCode})` };
@@ -177,6 +170,11 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
 
       const response = await makeTransferApiCall(payload);
 
+      if (!response || !('errCode' in response)) {
+        console.log(`API CALL FAILED: Invalid response from API for ${username}.`);
+        return { error: 'Failed to communicate with the API provider. The response was invalid.' };
+      }
+      
       if (response.errCode === '0') {
           const newBalance = await addDepositToDb({
               orderId: referenceid,
