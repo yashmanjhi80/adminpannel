@@ -66,19 +66,23 @@ export async function updateTransactionInDb(id: string, newStatus: 'SUCCESSFUL' 
         await pendingCollection.deleteOne({ _id: new ObjectId(id) });
 
         // Update user's wallet
-        const updateResult = await db.collection('users').findOneAndUpdate(
+        const updatedUser = await db.collection('users').findOneAndUpdate(
             { username: transaction.username },
             { $inc: { walletBalance: transaction.amount } },
-            { returnDocument: 'after' }
+            { returnDocument: 'after', projection: { walletBalance: 1 } }
         );
+        
+        if (!updatedUser?.value) {
+            throw new Error('User not found or failed to update balance');
+        }
 
-        return { ...deposit, _id: new ObjectId().toString(), newBalance: updateResult?.value?.walletBalance };
+        return { newBalance: updatedUser.value.walletBalance };
 
     } else { // FAILED
         // Move to a 'failedTransactions' collection or just delete from pending
         await pendingCollection.deleteOne({ _id: new ObjectId(id) });
         // Optionally, add to a failed collection for auditing
-        return null;
+        return { newBalance: null };
     }
 }
 

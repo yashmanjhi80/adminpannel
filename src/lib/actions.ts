@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { createHash } from 'crypto';
-import type { PendingTransaction, User } from './definitions';
+import type { PendingTransaction } from './definitions';
 import { getUser, updateTransactionInDb, addDepositToDb } from './data';
 
 const UpdateTransactionSchema = z.object({
@@ -39,7 +39,9 @@ const makeTransferApiCall = async (
   try {
     const response = await fetch(`${API_URL}?${params.toString()}`);
     if (!response.ok) {
-      throw new Error(`API call failed with status: ${response.status}`);
+      const errorBody = await response.text();
+      console.error(`API call failed with status: ${response.status}`, errorBody);
+      throw new Error(`API call failed with status: ${response.status}. Body: ${errorBody}`);
     }
     return await response.json();
   } catch (error) {
@@ -47,7 +49,7 @@ const makeTransferApiCall = async (
     if (error instanceof Error) {
         return { errCode: '999', errMsg: `Network error: ${error.message}` };
     }
-    return { errCode: '999', errMsg: 'Network error, status unknown' };
+    return { errCode: '999', errMsg: 'An unknown network error occurred.' };
   }
 };
 
@@ -98,9 +100,9 @@ export async function updateTransactionStatus(
     const response = await makeTransferApiCall(payload);
 
     if (response.errCode === '0') {
-      const updatedTransaction = await updateTransactionInDb(transaction._id, 'SUCCESSFUL', transaction.referenceid);
+      const { newBalance } = await updateTransactionInDb(transaction._id, 'SUCCESSFUL', transaction.referenceid);
       console.log(`SUCCESS: Transaction ${transaction.referenceid} approved. Amount ${transaction.amount} deposited to ${transaction.username}'s wallet.`);
-      return { success: 'Transaction approved and funds deposited successfully!', transaction: updatedTransaction };
+      return { success: 'Transaction approved and funds deposited successfully!', newBalance };
     } else if (['997', '999'].includes(response.errCode)) {
        // As per docs, for unknown status, we should withhold funds and check later.
        // For this admin panel, we will treat it as a temporary failure and ask admin to retry.
@@ -130,7 +132,7 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
       return { error: `Invalid data provided: ${errorMessages}` };
   }
 
-  const { userId, username, amount, referenceid, signature } = validatedFields.data;
+  const { userId, username, amount, referenceid } = validatedFields.data;
 
   try {
       const user = await getUser(username);
