@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useEffect, useActionState, useTransition } from 'react';
+import { useEffect, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -47,10 +48,9 @@ export default function AddMoneyDialog({
   onBalanceUpdate: (userId: string, newBalance: number) => void;
 }) {
   const { toast } = useToast();
-  const [isPending, startTransition] = useTransition();
-  const [state, dispatch] = useActionState(addMoneyToWallet, undefined);
+  const [state, formAction] = useActionState(addMoneyToWallet, undefined);
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm({
+  const { register, formState: { errors }, reset } = useForm({
     resolver: zodResolver(AddMoneySchema),
     defaultValues: { amount: '' }
   });
@@ -76,16 +76,6 @@ export default function AddMoneyDialog({
     }
   }, [state, toast, setIsOpen, reset, user._id, onBalanceUpdate]);
 
-  const onFormSubmit = (data: z.infer<typeof AddMoneySchema>) => {
-    startTransition(() => {
-        const formData = new FormData();
-        formData.append('userId', user._id);
-        formData.append('username', user.username);
-        formData.append('amount', data.amount.toString());
-        dispatch(formData);
-    });
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[425px]">
@@ -95,31 +85,34 @@ export default function AddMoneyDialog({
             Manually deposit funds into {user.username}'s wallet. This will use the live API.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onFormSubmit)}>
+        <form action={formAction}>
           <div className="grid gap-4 py-4">
+            <input type="hidden" name="userId" value={user._id} />
+            <input type="hidden" name="username" value={user.username} />
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="username" className="text-right">
+              <Label htmlFor="username-display" className="text-right">
                 Username
               </Label>
-              <Input id="username" value={user.username} readOnly className="col-span-3" />
+              <Input id="username-display" value={user.username} readOnly className="col-span-3" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="amount" className="text-right">
                 Amount (₹)
               </Label>
-              <Input id="amount" type="number" {...register('amount')} className="col-span-3" />
+              <Input id="amount" type="number" {...register('amount')} name="amount" className="col-span-3" />
             </div>
              {errors.amount && (
                 <p className="col-span-4 text-right text-sm text-destructive">{errors.amount.message}</p>
+            )}
+             {state?.error && (
+                <p className="col-span-4 text-right text-sm text-destructive">{state.error}</p>
             )}
           </div>
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" disabled={isPending}>
-                {isPending ? 'Depositing...' : 'Deposit'}
-            </Button>
+            <SubmitButton />
           </DialogFooter>
         </form>
       </DialogContent>
