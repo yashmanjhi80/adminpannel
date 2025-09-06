@@ -37,7 +37,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MoreHorizontal, BotMessageSquare, AlertCircle } from 'lucide-react';
+import { MoreHorizontal, AlertCircle } from 'lucide-react';
 import { updateTransactionStatus } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 
@@ -53,7 +53,6 @@ type AlertState = {
   isOpen: boolean;
   title: string;
   description: React.ReactNode;
-  isAiAssistance: boolean;
 };
 
 export default function TransactionsTable({
@@ -77,7 +76,6 @@ export default function TransactionsTable({
     isOpen: false,
     title: '',
     description: '',
-    isAiAssistance: false,
   });
 
   const filteredTransactions = useMemo(() => {
@@ -115,19 +113,11 @@ export default function TransactionsTable({
               : t
           )
         );
-      } else if (result.aiAssistance) {
-        setAlertState({
-          isOpen: true,
-          title: 'AI Troubleshooting Assistance',
-          description: result.aiAssistance,
-          isAiAssistance: true,
-        });
       } else if (result.error) {
         setAlertState({
           isOpen: true,
           title: 'Error',
           description: result.error,
-          isAiAssistance: false,
         });
       }
     });
@@ -258,12 +248,12 @@ export default function TransactionsTable({
       
       <AlertDialog
         open={alertState.isOpen}
-        onOpenChange={(open) => !open && setAlertState({ isOpen: false, title: '', description: '', isAiAssistance: false })}
+        onOpenChange={(open) => !open && setAlertState({ isOpen: false, title: '', description: '' })}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-                {alertState.isAiAssistance ? <BotMessageSquare className="text-primary"/> : <AlertCircle className="text-destructive" />}
+                <AlertCircle className="text-destructive" />
                 {alertState.title}
             </AlertDialogTitle>
             <AlertDialogDescription className="pt-4 whitespace-pre-wrap">
