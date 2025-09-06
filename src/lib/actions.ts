@@ -50,14 +50,17 @@ const makeTransferApiCall = async (
     console.log(`[API_CALL] Response Body: ${responseText}`);
 
     if (!response.ok) {
-        throw new Error(`API call failed with status ${response.status}: ${responseText}`);
+        // If status is not 2xx, treat the whole response as an error message.
+        return { errCode: response.status.toString(), errMsg: responseText };
     }
 
-    // It's possible the API returns non-JSON on failure, so we parse carefully.
     try {
+        // Attempt to parse as JSON. If it succeeds, return the parsed object.
         return JSON.parse(responseText);
     } catch (e) {
-        throw new Error(`Failed to parse API response as JSON: ${responseText}`);
+        // If JSON parsing fails, it's an unexpected (but likely failed) response.
+        // Return a custom error with the raw text.
+        return { errCode: '998', errMsg: `Invalid JSON response: ${responseText}` };
     }
     
   } catch (error) {
