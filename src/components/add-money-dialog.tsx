@@ -54,7 +54,7 @@ export default function AddMoneyDialog({
   onBalanceUpdate: (userId: string, newBalance: number) => void;
 }) {
   const { toast } = useToast();
-  const [state, formAction] = useActionState(addMoneyToWallet, undefined);
+  const [state, formAction] = useActionState(addMoneyToWallet, null);
   const [referenceId, setReferenceId] = useState('');
 
   const { register, formState: { errors }, reset } = useForm({
@@ -66,8 +66,11 @@ export default function AddMoneyDialog({
     if (isOpen) {
       const newReferenceId = `MANUAL_${Date.now()}`;
       setReferenceId(newReferenceId);
+    } else {
+        // Reset state when dialog closes
+        reset();
     }
-  }, [isOpen]);
+  }, [isOpen, reset]);
   
   useEffect(() => {
     if (!state) return;
@@ -81,7 +84,6 @@ export default function AddMoneyDialog({
         onBalanceUpdate(user._id, state.newBalance);
       }
       setIsOpen(false);
-      reset();
     }
     if (state.error) {
       toast({
@@ -90,7 +92,7 @@ export default function AddMoneyDialog({
         variant: 'destructive',
       });
     }
-  }, [state, toast, setIsOpen, reset, user._id, onBalanceUpdate]);
+  }, [state, toast, setIsOpen, onBalanceUpdate, user._id]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
