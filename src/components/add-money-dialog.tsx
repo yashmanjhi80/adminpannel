@@ -6,7 +6,6 @@ import { useFormStatus } from 'react-dom';
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { createHash } from 'crypto';
 
 import {
   Dialog,
@@ -40,7 +39,6 @@ function SubmitButton() {
 const API_CONFIG = {
   providercode: 'JE',
   operatorcode: 'i4bi',
-  secret_key: process.env.NEXT_PUBLIC_API_SECRET_KEY || '904c3acfdc028f495ccc5b60d01dcc49',
 };
 
 
@@ -58,14 +56,11 @@ export default function AddMoneyDialog({
   const { toast } = useToast();
   const [state, formAction] = useActionState(addMoneyToWallet, undefined);
   const [referenceId, setReferenceId] = useState('');
-  const [signature, setSignature] = useState('');
 
-  const { register, watch, formState: { errors }, reset } = useForm({
+  const { register, formState: { errors }, reset } = useForm({
     resolver: zodResolver(AddMoneySchema),
     defaultValues: { amount: '' }
   });
-
-  const amount = watch('amount');
 
   useEffect(() => {
     if (isOpen) {
@@ -74,18 +69,6 @@ export default function AddMoneyDialog({
     }
   }, [isOpen]);
   
-  useEffect(() => {
-    if (amount && user.password && referenceId) {
-      const type = '0';
-      const signatureString = `${amount}${API_CONFIG.operatorcode}${user.password}${API_CONFIG.providercode}${referenceId}${type}${user.username}${API_CONFIG.secret_key}`;
-      const newSignature = createHash('md5').update(signatureString).digest('hex').toUpperCase();
-      setSignature(newSignature);
-    } else {
-      setSignature('');
-    }
-  }, [amount, user.password, user.username, referenceId]);
-
-
   useEffect(() => {
     if (state?.success) {
       toast({
@@ -121,7 +104,6 @@ export default function AddMoneyDialog({
             <input type="hidden" name="userId" value={user._id} />
             <input type="hidden" name="username" value={user.username} />
             <input type="hidden" name="referenceid" value={referenceId} />
-             <input type="hidden" name="signature" value={signature} />
             
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="amount" className="text-right">
@@ -148,10 +130,6 @@ export default function AddMoneyDialog({
              <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right col-span-1">Ref. ID</Label>
               <Input value={referenceId} readOnly className="col-span-3" />
-            </div>
-             <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right col-span-1">Signature</Label>
-               <Input value={signature} readOnly className="col-span-3" />
             </div>
             
              {state?.error && (

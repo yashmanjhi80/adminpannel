@@ -16,7 +16,6 @@ const AddMoneySchema = z.object({
   username: z.string(),
   amount: z.coerce.number().positive({ message: 'Amount must be positive.' }),
   referenceid: z.string(),
-  signature: z.string(),
 });
 
 
