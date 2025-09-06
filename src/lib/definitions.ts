@@ -1,5 +1,7 @@
+import type { ObjectId } from 'mongodb';
+
 export type User = {
-    _id: string;
+    _id: string; // Comes as ObjectId, but we'll stringify
     username: string;
     password?: string;
     walletBalance: number;

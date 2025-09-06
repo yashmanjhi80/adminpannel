@@ -1,41 +1,30 @@
+import clientPromise from './mongodb';
 import type { User, Deposit, PendingTransaction } from './definitions';
 
-const users: User[] = [
-  { "_id": "68a2feba378cc4849ef13214", "username": "yash7879", "password": "password123", "walletBalance": 5000 },
-  { "_id": "689efba65eaa619491ea1d80", "username": "harsh63", "password": "password456", "walletBalance": 12000 },
-  { "_id": "68a4009383b71c1552e9554d", "username": "aman_sharma", "password": "password789", "walletBalance": 7500 },
-  { "_id": "68a4009383b71c1552e9554e", "username": "priya_p", "password": "password101", "walletBalance": 25000 },
-  { "_id": "68a4009383b71c1552e9554f", "username": "rohit_k", "password": "password112", "walletBalance": 1800 },
-];
+const DB_NAME = process.env.DB_NAME || 'user';
 
-const deposits: Deposit[] = [
-  { "_id": "689efba65eaa619491ea1d80", "orderId": "ORD1755249573834593", "username": "harsh63", "amount": 100, "money": "10000", "status": "SUCCESSFUL", "createdAt": new Date("2024-07-15T12:39:34.638Z") },
-  { "_id": "689efba65eaa619491ea1d81", "orderId": "ORD1755249573834594", "username": "yash7879", "amount": 250, "money": "25000", "status": "SUCCESSFUL", "createdAt": new Date("2024-07-16T09:15:22.112Z") },
-  { "_id": "689efba65eaa619491ea1d82", "orderId": "ORD1755249573834595", "username": "priya_p", "amount": 500, "money": "50000", "status": "SUCCESSFUL", "createdAt": new Date("2024-07-16T14:45:00.000Z") },
-];
-
-const pendingTransactions: PendingTransaction[] = [
-  { "_id": "68a2feba378cc4849ef13214", "username": "yash7879", "referenceid": "ORD1755505989268872", "type": "0", "amount": 100, "status": "PENDING", "createdAt": new Date("2024-07-18T18:08:26.190Z") },
-  { "_id": "68a4009383b71c1552e9554d", "username": "aman_sharma", "referenceid": "ORD1755578247077177", "type": "0", "amount": 75, "status": "PENDING", "createdAt": new Date("2024-07-19T09:21:55.470Z") },
-  { "_id": "68a4009383b71c1552e9555e", "username": "rohit_k", "referenceid": "ORD1755578247077178", "type": "0", "amount": 101, "status": "PENDING", "createdAt": new Date("2024-07-19T11:30:10.000Z") },
-  { "_id": "68a4009383b71c1552e9555f", "username": "priya_p", "referenceid": "ORD1755578247077179", "type": "0", "amount": 1200, "status": "PENDING", "createdAt": new Date("2024-07-20T08:00:05.123Z") },
-];
+async function getDb() {
+    const client = await clientPromise;
+    return client.db(DB_NAME);
+}
 
 // In a real application, these functions would fetch data from your MongoDB database.
 export async function fetchUsers(): Promise<User[]> {
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return users;
+    const db = await getDb();
+    const users = await db.collection('users').find({}).toArray();
+    return JSON.parse(JSON.stringify(users));
 }
 
 export async function fetchDeposits(): Promise<Deposit[]> {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return deposits;
+    const db = await getDb();
+    const deposits = await db.collection('deposits').find({ status: 'SUCCESSFUL' }).toArray();
+    return JSON.parse(JSON.stringify(deposits));
 }
 
 export async function fetchPendingTransactions(): Promise<PendingTransaction[]> {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return pendingTransactions;
+    const db = await getDb();
+    const pending = await db.collection('pendingTransactions').find({}).toArray();
+    return JSON.parse(JSON.stringify(pending));
 }
 
 export async function fetchAllTransactions(): Promise<(Deposit | PendingTransaction)[]> {
@@ -43,5 +32,47 @@ export async function fetchAllTransactions(): Promise<(Deposit | PendingTransact
     const allPending = await fetchPendingTransactions();
     const combined = [...allDeposits, ...allPending];
     // sort by date descending
-    return combined.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function getUser(username: string): Promise<User | null> {
+    const db = await getDb();
+    const user = await db.collection('users').findOne({ username: username });
+    if (!user) return null;
+    return JSON.parse(JSON.stringify(user));
+}
+
+export async function updateTransactionInDb(id: string, newStatus: 'SUCCESSFUL' | 'FAILED') {
+    const db = await getDb();
+    const pendingCollection = db.collection('pendingTransactions');
+    
+    const transaction = await pendingCollection.findOne({ _id: id });
+
+    if (!transaction) {
+        throw new Error('Pending transaction not found');
+    }
+
+    if (newStatus === 'SUCCESSFUL') {
+        const deposit = {
+            ...transaction,
+            status: 'SUCCESSFUL',
+            orderId: transaction.referenceid, // Use referenceid as orderId for consistency
+        };
+        delete (deposit as any).referenceid; // remove old id
+        delete (deposit as any).type;
+        
+        await db.collection('deposits').insertOne(deposit);
+        await pendingCollection.deleteOne({ _id: id });
+
+        // Update user's wallet
+        await db.collection('users').updateOne(
+            { username: transaction.username },
+            { $inc: { walletBalance: transaction.amount } }
+        );
+
+    } else { // FAILED
+        // Move to a 'failedTransactions' collection or just delete from pending
+        await pendingCollection.deleteOne({ _id: id });
+        // Optionally, add to a failed collection for auditing
+    }
 }
