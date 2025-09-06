@@ -1,6 +1,8 @@
+
 'use client';
 
 import { useState, useTransition, useMemo, type ReactNode } from 'react';
+import { format } from 'date-fns';
 import type { Deposit, PendingTransaction } from '@/lib/definitions';
 import {
   Card,
@@ -182,7 +184,7 @@ export default function TransactionsTable({
                     <TableCell className="font-medium">{tx.username}</TableCell>
                     <TableCell>{'referenceid' in tx ? tx.referenceid : tx.orderId}</TableCell>
                     <TableCell>₹{tx.amount.toLocaleString()}</TableCell>
-                    <TableCell>{tx.createdAt.toLocaleDateString()}</TableCell>
+                    <TableCell>{format(tx.createdAt, 'MM/dd/yyyy')}</TableCell>
                     <TableCell>
                       <Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge>
                     </TableCell>
