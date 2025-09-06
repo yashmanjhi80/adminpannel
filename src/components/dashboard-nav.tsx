@@ -46,14 +46,11 @@ export default function DashboardNav() {
           <SidebarMenuItem key={item.href}>
             <Link href={item.href}>
               <SidebarMenuButton
-                asChild
                 isActive={pathname === item.href}
                 tooltip={item.label}
               >
-                <>
-                  <item.icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                </>
+                <item.icon className="w-5 h-5" />
+                <span>{item.label}</span>
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
