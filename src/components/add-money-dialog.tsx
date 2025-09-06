@@ -1,11 +1,12 @@
 
 'use client';
 
-import { useEffect, useActionState } from 'react';
+import { useEffect, useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
+import { createHash } from 'crypto';
 
 import {
   Dialog,
@@ -36,6 +37,13 @@ function SubmitButton() {
   );
 }
 
+const API_CONFIG = {
+  providercode: 'JE',
+  operatorcode: 'i4bi',
+  secret_key: process.env.NEXT_PUBLIC_API_SECRET_KEY || '904c3acfdc028f495ccc5b60d01dcc49',
+};
+
+
 export default function AddMoneyDialog({
   isOpen,
   setIsOpen,
@@ -49,11 +57,34 @@ export default function AddMoneyDialog({
 }) {
   const { toast } = useToast();
   const [state, formAction] = useActionState(addMoneyToWallet, undefined);
+  const [referenceId, setReferenceId] = useState('');
+  const [signature, setSignature] = useState('');
 
-  const { register, formState: { errors }, reset } = useForm({
+  const { register, watch, formState: { errors }, reset } = useForm({
     resolver: zodResolver(AddMoneySchema),
     defaultValues: { amount: '' }
   });
+
+  const amount = watch('amount');
+
+  useEffect(() => {
+    if (isOpen) {
+      const newReferenceId = `MANUAL_${Date.now()}`;
+      setReferenceId(newReferenceId);
+    }
+  }, [isOpen]);
+  
+  useEffect(() => {
+    if (amount && user.password && referenceId) {
+      const type = '0';
+      const signatureString = `${amount}${API_CONFIG.operatorcode}${user.password}${API_CONFIG.providercode}${referenceId}${type}${user.username}${API_CONFIG.secret_key}`;
+      const newSignature = createHash('md5').update(signatureString).digest('hex').toUpperCase();
+      setSignature(newSignature);
+    } else {
+      setSignature('');
+    }
+  }, [amount, user.password, user.username, referenceId]);
+
 
   useEffect(() => {
     if (state?.success) {
@@ -78,7 +109,7 @@ export default function AddMoneyDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Money to Wallet</DialogTitle>
           <DialogDescription>
@@ -89,12 +120,9 @@ export default function AddMoneyDialog({
           <div className="grid gap-4 py-4">
             <input type="hidden" name="userId" value={user._id} />
             <input type="hidden" name="username" value={user.username} />
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="username-display" className="text-right">
-                Username
-              </Label>
-              <Input id="username-display" value={user.username} readOnly className="col-span-3" />
-            </div>
+            <input type="hidden" name="referenceid" value={referenceId} />
+             <input type="hidden" name="signature" value={signature} />
+            
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="amount" className="text-right">
                 Amount (₹)
@@ -104,6 +132,28 @@ export default function AddMoneyDialog({
              {errors.amount && (
                 <p className="col-span-4 text-right text-sm text-destructive">{errors.amount.message}</p>
             )}
+
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right col-span-1">Username</Label>
+              <Input value={user.username} readOnly className="col-span-3" />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right col-span-1">Op. Code</Label>
+              <Input value={API_CONFIG.operatorcode} readOnly className="col-span-3" />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right col-span-1">Prov. Code</Label>
+              <Input value={API_CONFIG.providercode} readOnly className="col-span-3" />
+            </div>
+             <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right col-span-1">Ref. ID</Label>
+              <Input value={referenceId} readOnly className="col-span-3" />
+            </div>
+             <div className="grid grid-cols-4 items-center gap-4">
+              <Label className="text-right col-span-1">Signature</Label>
+               <Input value={signature} readOnly className="col-span-3" />
+            </div>
+            
              {state?.error && (
                 <p className="col-span-4 text-right text-sm text-destructive">{state.error}</p>
             )}

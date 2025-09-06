@@ -15,6 +15,8 @@ const AddMoneySchema = z.object({
   userId: z.string(),
   username: z.string(),
   amount: z.coerce.number().positive({ message: 'Amount must be positive.' }),
+  referenceid: z.string(),
+  signature: z.string(),
 });
 
 
@@ -42,7 +44,9 @@ const makeTransferApiCall = async (
     return await response.json();
   } catch (error) {
     console.error("API Call Error:", error);
-    // In case of network error, simulate an unknown status as per docs
+    if (error instanceof Error) {
+        return { errCode: '999', errMsg: `Network error: ${error.message}` };
+    }
     return { errCode: '999', errMsg: 'Network error, status unknown' };
   }
 };
@@ -111,6 +115,9 @@ export async function updateTransactionStatus(
     }
   } catch (error) {
     console.error('Server Action Error:', error);
+    if (error instanceof Error) {
+        return { error: error.message };
+    }
     return { error: 'An unexpected server error occurred.' };
   }
 }
@@ -119,16 +126,12 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
   const validatedFields = AddMoneySchema.safeParse(Object.fromEntries(formData.entries()));
 
   if (!validatedFields.success) {
-      return { error: 'Invalid data provided.' };
+      const errorMessages = validatedFields.error.issues.map(issue => issue.message).join(', ');
+      return { error: `Invalid data provided: ${errorMessages}` };
   }
 
-  const { userId, username, amount } = validatedFields.data;
-  const parsedAmount = parseFloat(amount.toString());
+  const { userId, username, amount, referenceid, signature } = validatedFields.data;
 
-  if (isNaN(parsedAmount) || parsedAmount <= 0) {
-    return { error: 'Invalid amount.' };
-  }
-  
   try {
       const user = await getUser(username);
       if (!user || !user.password) {
@@ -136,13 +139,10 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
       }
       const userPassword = user.password;
       const type = '0'; // 0 for deposit
-      const referenceid = `MANUAL_${Date.now()}`;
 
-      const signatureString = `${parsedAmount}${API_CONFIG.operatorcode}${userPassword}${API_CONFIG.providercode}${referenceid}${type}${username}${API_CONFIG.secret_key}`;
-      const signature = createHash('md5')
-          .update(signatureString)
-          .digest('hex')
-          .toUpperCase();
+      // Regenerate signature on server to ensure security
+      const serverSignatureString = `${amount}${API_CONFIG.operatorcode}${userPassword}${API_CONFIG.providercode}${referenceid}${type}${username}${API_CONFIG.secret_key}`;
+      const serverSignature = createHash('md5').update(serverSignatureString).digest('hex').toUpperCase();
 
       const payload = {
           operatorcode: API_CONFIG.operatorcode,
@@ -151,8 +151,8 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
           password: userPassword,
           referenceid,
           type,
-          amount: parsedAmount,
-          signature,
+          amount,
+          signature: serverSignature,
       };
 
       const response = await makeTransferApiCall(payload);
@@ -161,13 +161,13 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
           const newBalance = await addDepositToDb({
               orderId: referenceid,
               username,
-              amount: parsedAmount,
-              money: parsedAmount.toString(),
+              amount: amount,
+              money: amount.toString(),
               status: 'SUCCESSFUL',
               createdAt: new Date(),
           });
-          console.log(`SUCCESS: Manual deposit of ${parsedAmount} for ${username} successful.`);
-          return { success: `Successfully deposited ₹${parsedAmount.toLocaleString()} to ${username}'s wallet.`, newBalance };
+          console.log(`SUCCESS: Manual deposit of ${amount} for ${username} successful.`);
+          return { success: `Successfully deposited ₹${amount.toLocaleString()} to ${username}'s wallet.`, newBalance };
       } else if (['997', '999'].includes(response.errCode)) {
           console.log(`UNKNOWN STATUS: Manual deposit for ${username} status unknown with code ${response.errCode}: ${response.errMsg}`);
           return { error: `Transaction status is unknown. Please check with the provider or retry later. (Code: ${response.errCode})` };
@@ -177,6 +177,9 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
       }
   } catch (error) {
       console.error('Add Money Server Action Error:', error);
-      return { error: 'An unexpected server error occurred.' };
+       if (error instanceof Error) {
+        return { error: error.message };
+    }
+    return { error: 'An unexpected server error occurred.' };
   }
 }
