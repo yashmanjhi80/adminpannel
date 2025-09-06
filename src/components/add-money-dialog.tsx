@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useEffect, useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
@@ -47,7 +47,7 @@ export default function AddMoneyDialog({
   onBalanceUpdate: (userId: string, newBalance: number) => void;
 }) {
   const { toast } = useToast();
-  const [state, dispatch] = useFormState(addMoneyToWallet, undefined);
+  const [state, dispatch] = useActionState(addMoneyToWallet, undefined);
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm({
     resolver: zodResolver(AddMoneySchema),
