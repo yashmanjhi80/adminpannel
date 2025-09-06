@@ -3,6 +3,11 @@ import { fetchAllTransactions } from '@/lib/data';
 
 export default async function TransactionsPage() {
   const transactions = await fetchAllTransactions();
+  const serializableTransactions = transactions.map(tx => ({
+    ...tx,
+    createdAt: tx.createdAt.toISOString(),
+  }));
+
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -10,7 +15,7 @@ export default async function TransactionsPage() {
         <h1 className="text-xl font-semibold">Transactions</h1>
       </header>
       <div className="p-4 sm:p-6">
-        <TransactionsTable initialTransactions={transactions} />
+        <TransactionsTable initialTransactions={serializableTransactions} />
       </div>
     </div>
   );

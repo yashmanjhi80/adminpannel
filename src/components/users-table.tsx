@@ -50,6 +50,7 @@ export default function UsersTable({ users }: { users: User[] }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Username</TableHead>
+                <TableHead>Reference ID</TableHead>
                 <TableHead>Wallet Balance</TableHead>
                 <TableHead>Password</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -59,8 +60,9 @@ export default function UsersTable({ users }: { users: User[] }) {
               {users.map((user) => (
                 <TableRow key={user._id}>
                   <TableCell className="font-medium">{user.username}</TableCell>
+                  <TableCell>{user.referenceid}</TableCell>
                   <TableCell>
-                    ₹{user.walletBalance.toLocaleString()}
+                    ₹{(user.walletBalance || 0).toLocaleString()}
                   </TableCell>
                   <TableCell className="font-mono">
                     <div className="flex items-center gap-2">

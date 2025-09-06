@@ -1,5 +1,7 @@
 import clientPromise from './mongodb';
 import type { User, Deposit, PendingTransaction } from './definitions';
+import { ObjectId } from 'mongodb';
+
 
 const DB_NAME = process.env.DB_NAME || 'user';
 
@@ -46,23 +48,24 @@ export async function updateTransactionInDb(id: string, newStatus: 'SUCCESSFUL' 
     const db = await getDb();
     const pendingCollection = db.collection('pendingTransactions');
     
-    const transaction = await pendingCollection.findOne({ _id: id });
+    const transaction = await pendingCollection.findOne({ _id: new ObjectId(id) });
 
     if (!transaction) {
         throw new Error('Pending transaction not found');
     }
 
     if (newStatus === 'SUCCESSFUL') {
-        const deposit = {
-            ...transaction,
+        const deposit: Omit<Deposit, '_id'> = {
+            orderId: transaction.referenceid,
+            username: transaction.username,
+            amount: transaction.amount,
+            money: transaction.amount.toString(),
             status: 'SUCCESSFUL',
-            orderId: transaction.referenceid, // Use referenceid as orderId for consistency
+            createdAt: transaction.createdAt,
         };
-        delete (deposit as any).referenceid; // remove old id
-        delete (deposit as any).type;
         
         await db.collection('deposits').insertOne(deposit);
-        await pendingCollection.deleteOne({ _id: id });
+        await pendingCollection.deleteOne({ _id: new ObjectId(id) });
 
         // Update user's wallet
         await db.collection('users').updateOne(
@@ -72,7 +75,7 @@ export async function updateTransactionInDb(id: string, newStatus: 'SUCCESSFUL' 
 
     } else { // FAILED
         // Move to a 'failedTransactions' collection or just delete from pending
-        await pendingCollection.deleteOne({ _id: id });
+        await pendingCollection.deleteOne({ _id: new ObjectId(id) });
         // Optionally, add to a failed collection for auditing
     }
 }

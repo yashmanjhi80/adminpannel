@@ -13,7 +13,7 @@ const FormSchema = z.object({
 const API_CONFIG = {
   providercode: 'JE',
   operatorcode: 'i4bi',
-  secret_key: process.env.API_SECRET_KEY || '',
+  secret_key: process.env.API_SECRET_KEY || '904c3acfdc028f495ccc5b60d01dcc49',
 };
 
 const API_URL = 'http://gsmd.336699bet.com/makeTransfer.aspx';

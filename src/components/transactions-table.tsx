@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useMemo } from 'react';
+import { useState, useTransition, useMemo, type ReactNode } from 'react';
 import type { Deposit, PendingTransaction } from '@/lib/definitions';
 import {
   Card,
@@ -33,7 +33,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -41,7 +40,13 @@ import { MoreHorizontal, AlertCircle } from 'lucide-react';
 import { updateTransactionStatus } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 
-type Transaction = Deposit | PendingTransaction;
+type SerializableTransaction = (Omit<Deposit, 'createdAt'> | Omit<PendingTransaction, 'createdAt'>) & {
+  createdAt: string;
+};
+
+type ClientSideTransaction = (Deposit | PendingTransaction) & {
+  createdAt: Date;
+}
 
 type DialogState = {
   isOpen: boolean;
@@ -52,16 +57,19 @@ type DialogState = {
 type AlertState = {
   isOpen: boolean;
   title: string;
-  description: React.ReactNode;
+  description: ReactNode;
 };
 
 export default function TransactionsTable({
   initialTransactions,
 }: {
-  initialTransactions: Transaction[];
+  initialTransactions: SerializableTransaction[];
 }) {
-  const [transactions, setTransactions] =
-    useState<Transaction[]>(initialTransactions);
+
+  const [transactions, setTransactions] = useState<ClientSideTransaction[]>(
+    () => initialTransactions.map(tx => ({...tx, createdAt: new Date(tx.createdAt)}))
+  );
+
   const [filter, setFilter] = useState('all');
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
