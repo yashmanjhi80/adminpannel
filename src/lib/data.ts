@@ -1,3 +1,4 @@
+
 import clientPromise from './mongodb';
 import type { User, Deposit, PendingTransaction } from './definitions';
 import { ObjectId } from 'mongodb';
@@ -69,14 +70,21 @@ export async function updateTransactionInDb(id: string, newStatus: 'SUCCESSFUL' 
         const updatedUser = await db.collection('users').findOneAndUpdate(
             { username: transaction.username },
             { $inc: { walletBalance: transaction.amount } },
-            { returnDocument: 'after', projection: { walletBalance: 1 } }
+            { returnDocument: 'after', projection: { walletBalance: 1 }, upsert: true }
         );
         
-        if (!updatedUser?.value) {
-            throw new Error('User not found or failed to update balance');
+        if (!updatedUser) {
+            // After upsert, this should theoretically not be hit if the user exists.
+            // If it's a new user somehow, their balance is now set.
+            // If we still get no user, something is very wrong.
+            const userCheck = await db.collection('users').findOne({ username: transaction.username });
+            if (!userCheck) {
+                 throw new Error('User not found or failed to update balance');
+            }
+            return { newBalance: userCheck.walletBalance };
         }
 
-        return { newBalance: updatedUser.value.walletBalance };
+        return { newBalance: updatedUser.walletBalance };
 
     } else { // FAILED
         // Move to a 'failedTransactions' collection or just delete from pending
@@ -97,12 +105,16 @@ export async function addDepositToDb(depositData: Omit<Deposit, '_id'>): Promise
     const result = await db.collection('users').findOneAndUpdate(
         { username: depositData.username },
         { $inc: { walletBalance: depositData.amount } },
-        { returnDocument: 'after', projection: { walletBalance: 1 } }
+        { returnDocument: 'after', projection: { walletBalance: 1 }, upsert: true }
     );
 
-    if (!result?.value) {
-        throw new Error('User not found or failed to update balance');
+    if (!result) {
+        const userCheck = await db.collection('users').findOne({ username: depositData.username });
+         if (!userCheck) {
+            throw new Error('User not found or failed to update balance after upsert.');
+        }
+        return userCheck.walletBalance;
     }
 
-    return result.value.walletBalance;
+    return result.walletBalance;
 }
