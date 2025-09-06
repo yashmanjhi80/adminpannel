@@ -70,7 +70,9 @@ export default function AddMoneyDialog({
   }, [isOpen]);
   
   useEffect(() => {
-    if (state?.success) {
+    if (!state) return;
+
+    if (state.success) {
       toast({
         title: 'Success',
         description: state.success,
@@ -81,7 +83,7 @@ export default function AddMoneyDialog({
       setIsOpen(false);
       reset();
     }
-    if (state?.error) {
+    if (state.error) {
       toast({
         title: 'Error',
         description: state.error,
