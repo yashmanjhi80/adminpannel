@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useActionState } from 'react';
+import { useEffect, useActionState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -47,6 +47,7 @@ export default function AddMoneyDialog({
   onBalanceUpdate: (userId: string, newBalance: number) => void;
 }) {
   const { toast } = useToast();
+  const [isPending, startTransition] = useTransition();
   const [state, dispatch] = useActionState(addMoneyToWallet, undefined);
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm({
@@ -76,11 +77,13 @@ export default function AddMoneyDialog({
   }, [state, toast, setIsOpen, reset, user._id, onBalanceUpdate]);
 
   const onFormSubmit = (data: z.infer<typeof AddMoneySchema>) => {
-    const formData = new FormData();
-    formData.append('userId', user._id);
-    formData.append('username', user.username);
-    formData.append('amount', data.amount.toString());
-    dispatch(formData);
+    startTransition(() => {
+        const formData = new FormData();
+        formData.append('userId', user._id);
+        formData.append('username', user.username);
+        formData.append('amount', data.amount.toString());
+        dispatch(formData);
+    });
   };
 
   return (
@@ -114,7 +117,9 @@ export default function AddMoneyDialog({
             <DialogClose asChild>
               <Button type="button" variant="secondary">Cancel</Button>
             </DialogClose>
-            <SubmitButton />
+            <Button type="submit" disabled={isPending}>
+                {isPending ? 'Depositing...' : 'Deposit'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
