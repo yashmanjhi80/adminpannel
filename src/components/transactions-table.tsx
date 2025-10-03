@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useTransition, useMemo, type ReactNode } from 'react';
+import { useState, useTransition, useMemo, type ReactNode, useEffect } from 'react';
 import { format } from 'date-fns';
 import type { Transaction } from '@/lib/definitions';
 import {
@@ -54,19 +54,21 @@ type AlertState = {
   description: ReactNode;
 };
 
-// Modify the Transaction type used in the client component to expect a Date object
-type ClientTransaction = Omit<Transaction, 'createdAt'> & {
-  createdAt: Date;
-};
-
-
+// The component now expects the raw Transaction type from the API
 export default function TransactionsTable({
   initialTransactions,
 }: {
-  initialTransactions: ClientTransaction[];
+  initialTransactions: Transaction[];
 }) {
 
-  const [transactions, setTransactions] = useState<ClientTransaction[]>(() => initialTransactions);
+  const [transactions, setTransactions] = useState(initialTransactions);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    // This effect runs only on the client, after hydration
+    setIsClient(true);
+  }, []);
+
 
   const [filter, setFilter] = useState('all');
   const [isPending, startTransition] = useTransition();
@@ -91,7 +93,7 @@ export default function TransactionsTable({
   }, [transactions, filter]);
 
   const openConfirmationDialog = (
-    transaction: ClientTransaction,
+    transaction: Transaction,
     action: 'SUCCESSFUL' | 'FAILED'
   ) => {
     setDialogState({ isOpen: true, transaction, action });
@@ -100,13 +102,7 @@ export default function TransactionsTable({
   const handleConfirmAction = () => {
     if (!dialogState.transaction || !dialogState.action) return;
 
-    // This action is designed for MongoDB pending transactions, it might not work as expected
-    // with the external API data source without modification in `lib/actions.ts`
     startTransition(async () => {
-      // The updateTransactionStatus function is designed for PendingTransaction type from the DB.
-      // Casting the API transaction type might lead to unexpected behavior if the action file isn't also updated.
-      // For now, we'll assume it requires a `referenceid` which is not present in the new type.
-      // The action will likely fail.
       const result = await updateTransactionStatus(
         {...dialogState.transaction, referenceid: dialogState.transaction.orderId, type: '0' } as any, // Attempt to adapt
         dialogState.action!
@@ -188,7 +184,9 @@ export default function TransactionsTable({
                     <TableCell className="font-medium">{tx.username}</TableCell>
                     <TableCell>{tx.orderId}</TableCell>
                     <TableCell>₹{tx.amount.toLocaleString()}</TableCell>
-                    <TableCell>{format(tx.createdAt, 'MM/dd/yyyy HH:mm')}</TableCell>
+                    <TableCell>
+                      {isClient ? format(new Date(tx.createdAt), 'MM/dd/yyyy HH:mm') : 'Loading...'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={getStatusVariant(tx.status)}>{tx.status.toUpperCase()}</Badge>
                     </TableCell>
