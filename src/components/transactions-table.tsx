@@ -39,13 +39,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MoreHorizontal, AlertCircle } from 'lucide-react';
-import { updateTransactionStatus } from '@/lib/actions';
+import { approveTransaction } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 
 type DialogState = {
   isOpen: boolean;
   transaction: Transaction | null;
-  action: 'SUCCESSFUL' | 'FAILED' | null;
+  action: 'APPROVE' | 'REJECT' | null;
 };
 
 type AlertState = {
@@ -54,21 +54,17 @@ type AlertState = {
   description: ReactNode;
 };
 
-// The component now expects the raw Transaction type from the API
 export default function TransactionsTable({
   initialTransactions,
 }: {
   initialTransactions: Transaction[];
 }) {
-
   const [transactions, setTransactions] = useState(initialTransactions);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    // This effect runs only on the client, after hydration
     setIsClient(true);
   }, []);
-
 
   const [filter, setFilter] = useState('all');
   const [isPending, startTransition] = useTransition();
@@ -88,13 +84,12 @@ export default function TransactionsTable({
 
   const filteredTransactions = useMemo(() => {
     if (filter === 'all') return transactions;
-    // API status might be lowercase, so we normalize
     return transactions.filter((t) => t.status.toLowerCase() === filter);
   }, [transactions, filter]);
 
   const openConfirmationDialog = (
     transaction: Transaction,
-    action: 'SUCCESSFUL' | 'FAILED'
+    action: 'APPROVE' | 'REJECT'
   ) => {
     setDialogState({ isOpen: true, transaction, action });
   };
@@ -102,47 +97,48 @@ export default function TransactionsTable({
   const handleConfirmAction = () => {
     if (!dialogState.transaction || !dialogState.action) return;
 
-    startTransition(async () => {
-      const result = await updateTransactionStatus(
-        {...dialogState.transaction, referenceid: dialogState.transaction.orderId, type: '0' } as any, // Attempt to adapt
-        dialogState.action!
-      );
-      setDialogState({ isOpen: false, transaction: null, action: null });
+    if (dialogState.action === 'APPROVE') {
+      startTransition(async () => {
+        const result = await approveTransaction(dialogState.transaction!);
+        setDialogState({ isOpen: false, transaction: null, action: null });
 
-      if (result.success) {
-        toast({
-          title: 'Success',
-          description: result.success,
-        });
-        // Optimistically update UI
-        setTransactions((prev) =>
-          prev.map((t) =>
-            t._id === dialogState.transaction?._id
-              ? { ...t, status: dialogState.action! }
-              : t
-          )
-        );
-      } else if (result.error) {
-        setAlertState({
-          isOpen: true,
-          title: 'Error',
-          description: result.error,
-        });
-      }
-    });
+        if (result.success) {
+          toast({
+            title: 'Success',
+            description: result.success,
+          });
+          // Optimistically update UI
+          setTransactions((prev) =>
+            prev.map((t) =>
+              t._id === dialogState.transaction?._id
+                ? { ...t, status: 'SUCCESSFUL' } // Or 'PAID' depending on what the callback does
+                : t
+            )
+          );
+        } else if (result.error) {
+          setAlertState({
+            isOpen: true,
+            title: 'Approval Error',
+            description: result.error,
+          });
+        }
+      });
+    }
   };
-  
-  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
+
+  const getStatusVariant = (
+    status: string
+  ): 'default' | 'secondary' | 'destructive' | 'outline' => {
     switch (status.toUpperCase()) {
-        case 'SUCCESSFUL':
-        case 'PAID':
-            return 'default';
-        case 'PENDING':
-            return 'secondary';
-        case 'FAILED':
-            return 'destructive';
-        default:
-            return 'outline';
+      case 'SUCCESSFUL':
+      case 'PAID':
+        return 'default';
+      case 'PENDING':
+        return 'secondary';
+      case 'FAILED':
+        return 'destructive';
+      default:
+        return 'outline';
     }
   };
 
@@ -159,7 +155,7 @@ export default function TransactionsTable({
           <Tabs value={filter} onValueChange={setFilter}>
             <TabsList>
               <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="successful">Successful</TabsTrigger>
+              <TabsTrigger value="paid">Successful</TabsTrigger>
               <TabsTrigger value="pending">Pending</TabsTrigger>
               <TabsTrigger value="failed">Failed</TabsTrigger>
             </TabsList>
@@ -185,10 +181,14 @@ export default function TransactionsTable({
                     <TableCell>{tx.orderId}</TableCell>
                     <TableCell>₹{tx.amount.toLocaleString()}</TableCell>
                     <TableCell>
-                      {isClient ? format(new Date(tx.createdAt), 'MM/dd/yyyy HH:mm') : 'Loading...'}
+                      {isClient
+                        ? format(new Date(tx.createdAt), 'MM/dd/yyyy HH:mm')
+                        : 'Loading...'}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getStatusVariant(tx.status)}>{tx.status.toUpperCase()}</Badge>
+                      <Badge variant={getStatusVariant(tx.status)}>
+                        {tx.status.toUpperCase()}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       {tx.status.toLowerCase() === 'pending' && (
@@ -199,10 +199,15 @@ export default function TransactionsTable({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                             <DropdownMenuItem disabled>
-                              Approve (Action N/A)
+                            <DropdownMenuItem
+                              onClick={() => openConfirmationDialog(tx, 'APPROVE')}
+                            >
+                              Approve
                             </DropdownMenuItem>
-                            <DropdownMenuItem disabled className="text-red-600">
+                            <DropdownMenuItem
+                              disabled
+                              className="text-red-600"
+                            >
                               Reject (Action N/A)
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -231,13 +236,13 @@ export default function TransactionsTable({
               <span className="font-bold">
                 {dialogState.transaction?.username}
               </span>{' '}
-              with amount{' '}
+              with order ID{' '}
               <span className="font-bold">
-                ₹{dialogState.transaction?.amount.toLocaleString()}
+                {dialogState.transaction?.orderId}
               </span>{' '}
               as{' '}
-              <span className="font-bold">{dialogState.action}</span>. This may
-              initiate a fund transfer.
+              <span className="font-bold">{dialogState.action}D</span>. This will
+              trigger a payment callback to the server.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -248,16 +253,18 @@ export default function TransactionsTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      
+
       <AlertDialog
         open={alertState.isOpen}
-        onOpenChange={(open) => !open && setAlertState({ isOpen: false, title: '', description: '' })}
+        onOpenChange={(open) =>
+          !open && setAlertState({ isOpen: false, title: '', description: '' })
+        }
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-                <AlertCircle className="text-destructive" />
-                {alertState.title}
+              <AlertCircle className="text-destructive" />
+              {alertState.title}
             </AlertDialogTitle>
             <AlertDialogDescription className="pt-4 whitespace-pre-wrap">
               {alertState.description}
