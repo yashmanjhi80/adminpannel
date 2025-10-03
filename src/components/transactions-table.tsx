@@ -54,13 +54,19 @@ type AlertState = {
   description: ReactNode;
 };
 
+// Modify the Transaction type used in the client component to expect a Date object
+type ClientTransaction = Omit<Transaction, 'createdAt'> & {
+  createdAt: Date;
+};
+
+
 export default function TransactionsTable({
   initialTransactions,
 }: {
-  initialTransactions: Transaction[];
+  initialTransactions: ClientTransaction[];
 }) {
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => initialTransactions);
+  const [transactions, setTransactions] = useState<ClientTransaction[]>(() => initialTransactions);
 
   const [filter, setFilter] = useState('all');
   const [isPending, startTransition] = useTransition();
@@ -85,7 +91,7 @@ export default function TransactionsTable({
   }, [transactions, filter]);
 
   const openConfirmationDialog = (
-    transaction: Transaction,
+    transaction: ClientTransaction,
     action: 'SUCCESSFUL' | 'FAILED'
   ) => {
     setDialogState({ isOpen: true, transaction, action });
@@ -182,7 +188,7 @@ export default function TransactionsTable({
                     <TableCell className="font-medium">{tx.username}</TableCell>
                     <TableCell>{tx.orderId}</TableCell>
                     <TableCell>₹{tx.amount.toLocaleString()}</TableCell>
-                    <TableCell>{format(new Date(tx.createdAt), 'MM/dd/yyyy HH:mm')}</TableCell>
+                    <TableCell>{format(tx.createdAt, 'MM/dd/yyyy HH:mm')}</TableCell>
                     <TableCell>
                       <Badge variant={getStatusVariant(tx.status)}>{tx.status.toUpperCase()}</Badge>
                     </TableCell>
