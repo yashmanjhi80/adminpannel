@@ -1,20 +1,12 @@
-
 'use server';
 
 import { z } from 'zod';
 import { createHash } from 'crypto';
 import { md5 } from 'js-md5';
-import type { PendingTransaction, Transaction } from './definitions';
-import { getUser, updateTransactionInDb, addDepositToDb } from './data';
+import type { Transaction, AdminUser, User, Deposit, PendingTransaction } from './definitions';
+import { addDepositToDb, getDb } from './data';
 import { format } from 'date-fns';
 
-
-const UpdateTransactionSchema = z.object({
-  transactionId: z.string(),
-  status: z.enum(['SUCCESSFUL', 'FAILED']),
-});
-
-// Schema for the editable form
 const ManualApiRequestSchema = z.object({
   userId: z.string(), // Needed for DB updates
   apiUrl: z.string().url(),
@@ -28,9 +20,13 @@ const ManualApiRequestSchema = z.object({
   signature: z.string(),
 });
 
+const AdminLoginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
 
 const API_CONFIG = {
-  // secret_key is still needed for server-side signature generation
   secret_key: process.env.API_SECRET_KEY || '904c3acfdc028f495ccc5b60d01dcc49',
   lg_pay_secret: process.env.LG_PAY_SECRET || 'l8BlAeUb5Bd3zwGHCvLs3GNSFRKJ71nL',
 };
@@ -44,7 +40,6 @@ const makeTransferApiCall = async (
     params.append(key, String(payload[key]));
   }
 
-  // Signature must be the last parameter for this specific API
   if (payload.signature) {
     params.delete('signature');
     params.append('signature', String(payload.signature));
@@ -72,10 +67,8 @@ const makeTransferApiCall = async (
     try {
       return JSON.parse(responseText);
     } catch (e) {
-      // If parsing fails, it could be a non-JSON success/error message
-      // Return a specific error code for non-JSON responses
       if (responseText.toLowerCase().includes('ok')) {
-        return { errCode: '0', errMsg: 'OK' }; // Treat "ok" as success
+        return { errCode: '0', errMsg: 'OK' }; 
       }
       return { errCode: '998', errMsg: `Invalid JSON response: ${responseText}` };
     }
@@ -91,7 +84,7 @@ const makeTransferApiCall = async (
 
 export async function approveTransaction(transaction: Transaction) {
   const CALLBACK_URL = 'https://game.zyronetworks.shop/payment-callback';
-  const LG_PAY_NOTIFY_URL = 'https://congenial-space-computing-machine-p67v65p5wj4crpxw-4000.app.github.dev/payment-callback';
+  const LG_PAY_NOTIFY_URL = 'https://game.zyronetworks.shop/payment-callback';
   
   const payload: Record<string, any> = {
     order_sn: transaction.orderId,
@@ -101,7 +94,6 @@ export async function approveTransaction(transaction: Transaction) {
     remark: 'ManualApproval',
   };
 
-  // Correct, fixed-order signature generation
   const stringToSign = `money=${payload.money}&notify_url=${LG_PAY_NOTIFY_URL}&order_sn=${payload.order_sn}&remark=${payload.remark}&status=${payload.status}&key=${API_CONFIG.lg_pay_secret}`;
 
   payload.sign = createHash('md5').update(stringToSign).digest('hex').toUpperCase();
@@ -177,4 +169,89 @@ export async function addMoneyToWallet(prevState: any, formData: FormData) {
     }
     return { error: 'An unexpected server error occurred.' };
   }
+}
+
+export async function adminLogin(prevState: any, formData: FormData) {
+  const validatedFields = AdminLoginSchema.safeParse(Object.fromEntries(formData.entries()));
+
+  if (!validatedFields.success) {
+    const errorMessages = validatedFields.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
+    return { error: `Invalid data: ${errorMessages}` };
+  }
+
+  const { username, password } = validatedFields.data;
+  const API_URL = 'https://game.zyronetworks.shop/admin-login';
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      return { error: data.message || 'Login failed. Please check your credentials.' };
+    }
+
+    return { success: true, user: data.user as AdminUser };
+
+  } catch (error) {
+    console.error('[ADMIN_LOGIN_ERROR]', error);
+    if (error instanceof Error) {
+      return { error: `Network error: ${error.message}` };
+    }
+    return { error: 'An unknown network error occurred during login.' };
+  }
+}
+
+
+export async function fetchUsers(): Promise<User[]> {
+    const db = await getDb();
+    const users = await db.collection('users').find({}).sort({ createdAt: -1 }).toArray();
+    return JSON.parse(JSON.stringify(users));
+}
+
+async function fetchDeposits(): Promise<Deposit[]> {
+    const db = await getDb();
+    const deposits = await db.collection('deposits').find({ status: 'SUCCESSFUL' }).sort({ createdAt: -1 }).toArray();
+    return JSON.parse(JSON.stringify(deposits));
+}
+
+async function fetchPendingTransactions(): Promise<PendingTransaction[]> {
+    const db = await getDb();
+    const pending = await db.collection('pendingTransactions').find({}).sort({ createdAt: -1 }).toArray();
+    return JSON.parse(JSON.stringify(pending));
+}
+
+export async function fetchDashboardData() {
+    const [usersData, depositsData, pendingData] = await Promise.all([
+        fetchUsers(),
+        fetchDeposits(),
+        fetchPendingTransactions(),
+    ]);
+    return { usersData, depositsData, pendingData };
+}
+
+export async function fetchAllTransactions(): Promise<Transaction[]> {
+    try {
+        const response = await fetch("https://game.zyronetworks.shop/agent/recent-transactions", {
+            cache: 'no-store' // Ensure we get fresh data
+        });
+        if (!response.ok) {
+            console.error("Failed to fetch transactions from API:", response.statusText);
+            return [];
+        }
+        const data = await response.json();
+        if (data.success && Array.isArray(data.transactions)) {
+            return data.transactions;
+        }
+        return [];
+    } catch (error) {
+        console.error("Error fetching external transactions:", error);
+        return [];
+    }
 }

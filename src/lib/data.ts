@@ -1,51 +1,13 @@
 
 import clientPromise from './mongodb';
-import type { User, Deposit, PendingTransaction, Transaction } from './definitions';
+import type { User, Deposit } from './definitions';
 import { ObjectId } from 'mongodb';
 
 const DB_NAME = process.env.DB_NAME || 'user';
 
-async function getDb() {
+export async function getDb() {
     const client = await clientPromise;
     return client.db(DB_NAME);
-}
-
-export async function fetchUsers(): Promise<User[]> {
-    const db = await getDb();
-    const users = await db.collection('users').find({}).sort({ createdAt: -1 }).toArray();
-    return JSON.parse(JSON.stringify(users));
-}
-
-export async function fetchDeposits(): Promise<Deposit[]> {
-    const db = await getDb();
-    const deposits = await db.collection('deposits').find({ status: 'SUCCESSFUL' }).sort({ createdAt: -1 }).toArray();
-    return JSON.parse(JSON.stringify(deposits));
-}
-
-export async function fetchPendingTransactions(): Promise<PendingTransaction[]> {
-    const db = await getDb();
-    const pending = await db.collection('pendingTransactions').find({}).sort({ createdAt: -1 }).toArray();
-    return JSON.parse(JSON.stringify(pending));
-}
-
-export async function fetchAllTransactions(): Promise<Transaction[]> {
-    try {
-        const response = await fetch("https://game.zyronetworks.shop/agent/recent-transactions", {
-            cache: 'no-store' // Ensure we get fresh data
-        });
-        if (!response.ok) {
-            console.error("Failed to fetch transactions from API:", response.statusText);
-            return [];
-        }
-        const data = await response.json();
-        if (data.success && Array.isArray(data.transactions)) {
-            return data.transactions;
-        }
-        return [];
-    } catch (error) {
-        console.error("Error fetching external transactions:", error);
-        return [];
-    }
 }
 
 export async function getUser(username: string): Promise<User | null> {

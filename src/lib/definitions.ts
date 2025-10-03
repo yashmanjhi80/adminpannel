@@ -26,7 +26,7 @@ export type PendingTransaction = {
     createdAt: Date;
 };
 
-// New type to match the external API structure
+// This type matches the external API structure from /agent/recent-transactions
 export type Transaction = {
     _id: string;
     orderId: string;
@@ -35,5 +35,12 @@ export type Transaction = {
     amount: number;
     walletProvider?: string;
     status: string;
-    createdAt: string; // Comes as a string from the API
+    createdAt: string; 
+};
+
+// Type for the logged-in admin user
+export type AdminUser = {
+    username: string;
+    email: string;
+    role: 'admin';
 };

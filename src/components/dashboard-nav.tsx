@@ -18,8 +18,9 @@ import {
   LogOut,
   Landmark,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
+import { useAuth } from '@/contexts/auth-context';
+import { useRouter } from 'next/navigation';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -29,6 +30,13 @@ const navItems = [
 
 export default function DashboardNav() {
   const pathname = usePathname();
+  const { logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
+  };
 
   return (
     <>
@@ -67,11 +75,9 @@ export default function DashboardNav() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Logout">
-              <Link href="#">
-                <LogOut className="w-5 h-5" />
-                <span>Logout</span>
-              </Link>
+            <SidebarMenuButton onClick={handleLogout} tooltip="Logout">
+              <LogOut className="w-5 h-5" />
+              <span>Logout</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
