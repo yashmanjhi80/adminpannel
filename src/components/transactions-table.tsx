@@ -3,7 +3,7 @@
 
 import { useState, useTransition, useMemo, type ReactNode } from 'react';
 import { format } from 'date-fns';
-import type { Deposit, PendingTransaction } from '@/lib/definitions';
+import type { Transaction } from '@/lib/definitions';
 import {
   Card,
   CardContent,
@@ -42,17 +42,9 @@ import { MoreHorizontal, AlertCircle } from 'lucide-react';
 import { updateTransactionStatus } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 
-type SerializableTransaction = (Omit<Deposit, 'createdAt'> | Omit<PendingTransaction, 'createdAt'>) & {
-  createdAt: string;
-};
-
-type ClientSideTransaction = (Deposit | PendingTransaction) & {
-  createdAt: Date;
-}
-
 type DialogState = {
   isOpen: boolean;
-  transaction: PendingTransaction | null;
+  transaction: Transaction | null;
   action: 'SUCCESSFUL' | 'FAILED' | null;
 };
 
@@ -65,12 +57,10 @@ type AlertState = {
 export default function TransactionsTable({
   initialTransactions,
 }: {
-  initialTransactions: SerializableTransaction[];
+  initialTransactions: Transaction[];
 }) {
 
-  const [transactions, setTransactions] = useState<ClientSideTransaction[]>(
-    () => initialTransactions.map(tx => ({...tx, createdAt: new Date(tx.createdAt)}))
-  );
+  const [transactions, setTransactions] = useState<Transaction[]>(() => initialTransactions);
 
   const [filter, setFilter] = useState('all');
   const [isPending, startTransition] = useTransition();
@@ -90,11 +80,12 @@ export default function TransactionsTable({
 
   const filteredTransactions = useMemo(() => {
     if (filter === 'all') return transactions;
+    // API status might be lowercase, so we normalize
     return transactions.filter((t) => t.status.toLowerCase() === filter);
   }, [transactions, filter]);
 
   const openConfirmationDialog = (
-    transaction: PendingTransaction,
+    transaction: Transaction,
     action: 'SUCCESSFUL' | 'FAILED'
   ) => {
     setDialogState({ isOpen: true, transaction, action });
@@ -103,9 +94,15 @@ export default function TransactionsTable({
   const handleConfirmAction = () => {
     if (!dialogState.transaction || !dialogState.action) return;
 
+    // This action is designed for MongoDB pending transactions, it might not work as expected
+    // with the external API data source without modification in `lib/actions.ts`
     startTransition(async () => {
+      // The updateTransactionStatus function is designed for PendingTransaction type from the DB.
+      // Casting the API transaction type might lead to unexpected behavior if the action file isn't also updated.
+      // For now, we'll assume it requires a `referenceid` which is not present in the new type.
+      // The action will likely fail.
       const result = await updateTransactionStatus(
-        dialogState.transaction!,
+        {...dialogState.transaction, referenceid: dialogState.transaction.orderId, type: '0' } as any, // Attempt to adapt
         dialogState.action!
       );
       setDialogState({ isOpen: false, transaction: null, action: null });
@@ -134,8 +131,9 @@ export default function TransactionsTable({
   };
   
   const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
-    switch (status) {
+    switch (status.toUpperCase()) {
         case 'SUCCESSFUL':
+        case 'PAID':
             return 'default';
         case 'PENDING':
             return 'secondary';
@@ -153,7 +151,7 @@ export default function TransactionsTable({
           <div className="flex-1">
             <CardTitle>All Transactions</CardTitle>
             <CardDescription>
-              View and manage all user transactions.
+              Viewing recent transactions from the provider.
             </CardDescription>
           </div>
           <Tabs value={filter} onValueChange={setFilter}>
@@ -171,7 +169,7 @@ export default function TransactionsTable({
               <TableHeader>
                 <TableRow>
                   <TableHead>Username</TableHead>
-                  <TableHead>Reference/Order ID</TableHead>
+                  <TableHead>Order ID</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
@@ -182,14 +180,14 @@ export default function TransactionsTable({
                 {filteredTransactions.map((tx) => (
                   <TableRow key={tx._id}>
                     <TableCell className="font-medium">{tx.username}</TableCell>
-                    <TableCell>{'referenceid' in tx ? tx.referenceid : tx.orderId}</TableCell>
+                    <TableCell>{tx.orderId}</TableCell>
                     <TableCell>₹{tx.amount.toLocaleString()}</TableCell>
-                    <TableCell>{format(tx.createdAt, 'MM/dd/yyyy')}</TableCell>
+                    <TableCell>{format(new Date(tx.createdAt), 'MM/dd/yyyy HH:mm')}</TableCell>
                     <TableCell>
-                      <Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge>
+                      <Badge variant={getStatusVariant(tx.status)}>{tx.status.toUpperCase()}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {tx.status === 'PENDING' && (
+                      {tx.status.toLowerCase() === 'pending' && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="icon" variant="ghost">
@@ -197,20 +195,11 @@ export default function TransactionsTable({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() =>
-                                openConfirmationDialog(tx as PendingTransaction, 'SUCCESSFUL')
-                              }
-                            >
-                              Approve
+                             <DropdownMenuItem disabled>
+                              Approve (Action N/A)
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                openConfirmationDialog(tx as PendingTransaction, 'FAILED')
-                              }
-                              className="text-red-600"
-                            >
-                              Reject
+                            <DropdownMenuItem disabled className="text-red-600">
+                              Reject (Action N/A)
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

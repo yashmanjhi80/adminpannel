@@ -25,3 +25,15 @@ export type PendingTransaction = {
     status: 'PENDING';
     createdAt: Date;
 };
+
+// New type to match the external API structure
+export type Transaction = {
+    _id: string;
+    orderId: string;
+    username: string;
+    password?: string | null;
+    amount: number;
+    walletProvider?: string;
+    status: string;
+    createdAt: string; // Comes as a string from the API
+};

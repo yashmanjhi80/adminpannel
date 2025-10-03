@@ -1,6 +1,6 @@
 
 import clientPromise from './mongodb';
-import type { User, Deposit, PendingTransaction } from './definitions';
+import type { User, Deposit, PendingTransaction, Transaction } from './definitions';
 import { ObjectId } from 'mongodb';
 
 const DB_NAME = process.env.DB_NAME || 'user';
@@ -28,12 +28,24 @@ export async function fetchPendingTransactions(): Promise<PendingTransaction[]> 
     return JSON.parse(JSON.stringify(pending));
 }
 
-export async function fetchAllTransactions(): Promise<(Deposit | PendingTransaction)[]> {
-    const allDeposits = await fetchDeposits();
-    const allPending = await fetchPendingTransactions();
-    const combined = [...allDeposits, ...allPending];
-    // sort by date descending
-    return combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+export async function fetchAllTransactions(): Promise<Transaction[]> {
+    try {
+        const response = await fetch("https://game.zyronetworks.shop/agent/recent-transactions", {
+            cache: 'no-store' // Ensure we get fresh data
+        });
+        if (!response.ok) {
+            console.error("Failed to fetch transactions from API:", response.statusText);
+            return [];
+        }
+        const data = await response.json();
+        if (data.success && Array.isArray(data.transactions)) {
+            return data.transactions;
+        }
+        return [];
+    } catch (error) {
+        console.error("Error fetching external transactions:", error);
+        return [];
+    }
 }
 
 export async function getUser(username: string): Promise<User | null> {
@@ -74,9 +86,6 @@ export async function updateTransactionInDb(id: string, newStatus: 'SUCCESSFUL' 
         );
         
         if (!updatedUser) {
-            // After upsert, this should theoretically not be hit if the user exists.
-            // If it's a new user somehow, their balance is now set.
-            // If we still get no user, something is very wrong.
             const userCheck = await db.collection('users').findOne({ username: transaction.username });
             if (!userCheck) {
                  throw new Error('User not found or failed to update balance');
