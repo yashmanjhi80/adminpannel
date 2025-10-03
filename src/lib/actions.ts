@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import { createHash } from 'crypto';
+import { md5 } from 'js-md5';
 import type { PendingTransaction, Transaction } from './definitions';
 import { getUser, updateTransactionInDb, addDepositToDb } from './data';
 import { format } from 'date-fns';
@@ -73,6 +74,9 @@ const makeTransferApiCall = async (
     } catch (e) {
       // If parsing fails, it could be a non-JSON success/error message
       // Return a specific error code for non-JSON responses
+      if (responseText.toLowerCase().includes('ok')) {
+        return { errCode: '0', errMsg: 'OK' }; // Treat "ok" as success
+      }
       return { errCode: '998', errMsg: `Invalid JSON response: ${responseText}` };
     }
     
@@ -87,6 +91,7 @@ const makeTransferApiCall = async (
 
 export async function approveTransaction(transaction: Transaction) {
   const CALLBACK_URL = 'https://game.zyronetworks.shop/payment-callback';
+  const LG_PAY_NOTIFY_URL = 'https://congenial-space-computing-machine-p67v65p5wj4crpxw-4000.app.github.dev/payment-callback';
   
   const payload: Record<string, any> = {
     order_sn: transaction.orderId,
@@ -96,12 +101,13 @@ export async function approveTransaction(transaction: Transaction) {
     remark: 'ManualApproval',
   };
 
-  const sortedKeys = Object.keys(payload).sort();
-  const stringA = sortedKeys.map(key => `${key}=${payload[key]}`).join('&');
-  const stringToSign = `${stringA}&key=${API_CONFIG.lg_pay_secret}`;
+  // Correct, fixed-order signature generation
+  const stringToSign = `money=${payload.money}&notify_url=${LG_PAY_NOTIFY_URL}&order_sn=${payload.order_sn}&remark=${payload.remark}&status=${payload.status}&key=${API_CONFIG.lg_pay_secret}`;
+
   payload.sign = createHash('md5').update(stringToSign).digest('hex').toUpperCase();
 
   console.log(`[CALLBACK_CALL] Sending approval for order: ${payload.order_sn}`);
+  console.log(`[CALLBACK_CALL] String to sign: ${stringToSign}`);
   console.log(`[CALLBACK_CALL] Payload:`, payload);
 
   try {
