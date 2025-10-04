@@ -74,13 +74,13 @@ export default function LoginPage() {
                 id="username"
                 name="username"
                 type="text"
-                placeholder="yash7879"
+                placeholder="username"
                 required
               />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required />
+              <Input id="password" name="password" placeholder="password" type="password" required />
             </div>
              {state?.error && (
                 <p className="text-sm text-center text-destructive bg-destructive/10 p-2 rounded-md">{state.error}</p>
