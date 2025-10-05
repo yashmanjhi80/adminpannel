@@ -19,13 +19,19 @@ import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import AddMoneyDialog from './add-money-dialog';
+import ViewUserDialog from './view-user-dialog';
 
 export default function UsersTable({ users: initialUsers }: { users: User[] }) {
   const { toast } = useToast();
   const [users, setUsers] = useState(initialUsers);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
-  const [isDialogOpen, setDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  
+  const [isAddMoneyDialogOpen, setAddMoneyDialogOpen] = useState(false);
+  const [selectedUserForAddMoney, setSelectedUserForAddMoney] = useState<User | null>(null);
+
+  const [isViewUserDialogOpen, setViewUserDialogOpen] = useState(false);
+  const [selectedUserForView, setSelectedUserForView] = useState<User | null>(null);
+
 
   const handlePasswordReset = (username: string) => {
     toast({
@@ -38,9 +44,14 @@ export default function UsersTable({ users: initialUsers }: { users: User[] }) {
     setShowPasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
-  const handleOpenDialog = (user: User) => {
-    setSelectedUser(user);
-    setDialogOpen(true);
+  const handleOpenAddMoneyDialog = (user: User) => {
+    setSelectedUserForAddMoney(user);
+    setAddMoneyDialogOpen(true);
+  }
+
+  const handleOpenViewUserDialog = (user: User) => {
+    setSelectedUserForView(user);
+    setViewUserDialogOpen(true);
   }
 
   const handleBalanceUpdate = (userId: string, newBalance: number) => {
@@ -91,9 +102,16 @@ export default function UsersTable({ users: initialUsers }: { users: User[] }) {
                     </TableCell>
                     <TableCell className="text-right space-x-2">
                        <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleOpenViewUserDialog(user)}
+                      >
+                        View
+                      </Button>
+                       <Button
                         variant="default"
                         size="sm"
-                        onClick={() => handleOpenDialog(user)}
+                        onClick={() => handleOpenAddMoneyDialog(user)}
                       >
                         Add Money
                       </Button>
@@ -112,12 +130,21 @@ export default function UsersTable({ users: initialUsers }: { users: User[] }) {
           </div>
         </CardContent>
       </Card>
-      {selectedUser && (
+      
+      {selectedUserForAddMoney && (
         <AddMoneyDialog 
-          isOpen={isDialogOpen} 
-          setIsOpen={setDialogOpen} 
-          user={selectedUser} 
+          isOpen={isAddMoneyDialogOpen} 
+          setIsOpen={setAddMoneyDialogOpen} 
+          user={selectedUserForAddMoney} 
           onBalanceUpdate={handleBalanceUpdate}
+        />
+      )}
+
+      {selectedUserForView && (
+        <ViewUserDialog 
+          isOpen={isViewUserDialogOpen} 
+          setIsOpen={setViewUserDialogOpen} 
+          user={selectedUserForView} 
         />
       )}
     </>
