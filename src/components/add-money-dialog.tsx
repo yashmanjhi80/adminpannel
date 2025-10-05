@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { addMoneyToWallet } from '@/lib/actions';
 import type { User } from '@/lib/definitions';
+import { config } from '@/lib/config';
 
 
 function SubmitButton() {
@@ -31,7 +32,7 @@ function SubmitButton() {
   );
 }
 
-const SECRET_KEY = '904c3acfdc028f495ccc5b60d01dcc49';
+const SECRET_KEY = config.transfer.secret_key;
 
 export default function AddMoneyDialog({
   isOpen,
@@ -48,9 +49,9 @@ export default function AddMoneyDialog({
   const [state, formAction] = useActionState(addMoneyToWallet, null);
   
   const [formState, setFormState] = useState({
-    apiUrl: 'http://gsmd.336699bet.com/makeTransfer.aspx',
-    operatorcode: 'i4bi',
-    providercode: 'JE',
+    apiUrl: config.transfer.apiUrl,
+    operatorcode: config.transfer.operatorcode,
+    providercode: config.transfer.providercode,
     username: '',
     password: '',
     referenceid: '',
@@ -63,9 +64,9 @@ export default function AddMoneyDialog({
   useEffect(() => {
     if (isOpen && user) {
       setFormState({
-        apiUrl: 'http://gsmd.336699bet.com/makeTransfer.aspx',
-        operatorcode: 'i4bi',
-        providercode: 'JE',
+        apiUrl: config.transfer.apiUrl,
+        operatorcode: config.transfer.operatorcode,
+        providercode: config.transfer.providercode,
         username: user.username,
         password: user.password || '',
         referenceid: `MANUAL${Date.now()}`, // Numeric, unique reference ID
@@ -168,7 +169,7 @@ export default function AddMoneyDialog({
               <Input id="password" name="password" value={formState.password} onChange={handleInputChange} className="col-span-3" />
             </div>
             
-            <div className="grid grid-cols-4 items-center.gap-4">
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="referenceid" className="text-right">referenceid</Label>
               <Input id="referenceid" name="referenceid" value={formState.referenceid} onChange={handleInputChange} className="col-span-3" />
             </div>

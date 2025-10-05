@@ -2,12 +2,11 @@
 import clientPromise from './mongodb';
 import type { User, Deposit } from './definitions';
 import { ObjectId } from 'mongodb';
-
-const DB_NAME = process.env.DB_NAME || 'user';
+import { config } from './config';
 
 export async function getDb() {
     const client = await clientPromise;
-    return client.db(DB_NAME);
+    return client.db(config.db.db_name);
 }
 
 export async function getUser(username: string): Promise<User | null> {

@@ -2,10 +2,10 @@
 
 import { z } from 'zod';
 import { createHash } from 'crypto';
-import { md5 } from 'js-md5';
 import type { Transaction, AdminUser, User, Deposit, PendingTransaction } from './definitions';
 import { addDepositToDb, getDb } from './data';
 import { format } from 'date-fns';
+import { config } from './config';
 
 const ManualApiRequestSchema = z.object({
   userId: z.string(), // Needed for DB updates
@@ -24,12 +24,6 @@ const AdminLoginSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
 });
-
-
-const API_CONFIG = {
-  secret_key: process.env.API_SECRET_KEY || '904c3acfdc028f495ccc5b60d01dcc49',
-  lg_pay_secret: process.env.LG_PAY_SECRET || 'l8BlAeUb5Bd3zwGHCvLs3GNSFRKJ71nL',
-};
 
 const makeTransferApiCall = async (
   apiUrl: string,
@@ -83,9 +77,6 @@ const makeTransferApiCall = async (
 };
 
 export async function approveTransaction(transaction: Transaction) {
-  const CALLBACK_URL = 'https://game.zyronetworks.shop/payment-callback';
-  const LG_PAY_NOTIFY_URL = 'https://game.zyronetworks.shop/payment-callback';
-  
   const payload: Record<string, any> = {
     order_sn: transaction.orderId,
     money: transaction.amount.toFixed(2),
@@ -94,8 +85,8 @@ export async function approveTransaction(transaction: Transaction) {
     remark: 'ManualApproval',
   };
 
-  const stringToSign = `money=${payload.money}&notify_url=${LG_PAY_NOTIFY_URL}&order_sn=${payload.order_sn}&remark=${payload.remark}&status=${payload.status}&key=${API_CONFIG.lg_pay_secret}`;
-
+  const stringToSign = `money=${payload.money}&notify_url=${config.lgPay.notifyUrl}&order_sn=${payload.order_sn}&remark=${payload.remark}&status=${payload.status}&key=${config.lgPay.secret}`;
+  
   payload.sign = createHash('md5').update(stringToSign).digest('hex').toUpperCase();
 
   console.log(`[CALLBACK_CALL] Sending approval for order: ${payload.order_sn}`);
@@ -103,7 +94,7 @@ export async function approveTransaction(transaction: Transaction) {
   console.log(`[CALLBACK_CALL] Payload:`, payload);
 
   try {
-    const response = await fetch(CALLBACK_URL, {
+    const response = await fetch(config.api.paymentCallback, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -180,10 +171,9 @@ export async function adminLogin(prevState: any, formData: FormData) {
   }
 
   const { username, password } = validatedFields.data;
-  const API_URL = 'https://game.zyronetworks.shop/admin-login';
 
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch(config.api.adminLogin, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -238,7 +228,7 @@ export async function fetchDashboardData() {
 
 export async function fetchAllTransactions(): Promise<Transaction[]> {
     try {
-        const response = await fetch("https://game.zyronetworks.shop/agent/recent-transactions", {
+        const response = await fetch(config.api.recentTransactions, {
             cache: 'no-store' // Ensure we get fresh data
         });
         if (!response.ok) {
